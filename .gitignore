@@ -1,0 +1,30 @@
+# --- Build output (CMake + FetchContent JUCE caches) ---
+build/
+**/build/
+cmake-build-*/
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# --- Windows ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.user
+
+# --- IDE / editor ---
+.vs/
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# --- Plugin binaries / packaging ---
+*.vst3
+*.component
+*.aaxplugin
+*.zip
+*.dmg
