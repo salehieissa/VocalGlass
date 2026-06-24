@@ -36,7 +36,21 @@ namespace licensing
             // Pick the verifier: real Keygen if configured, else offline test mode.
             if (keygenConfigured())
                 LicenseManager::getInstance().setVerifier (
-                    makeKeygenVerifier (kKeygenAccountId, productCode));
+                    makeKeygenVerifier (kKeygenAccountId));
+
+            // The overlay uses its OWN look-and-feel so its button/text always
+            // render legibly, independent of each plugin's custom LookAndFeel
+            // (several of which paint all buttons as white pills).
+            lnf.setColour (juce::TextButton::buttonColourId,   theme::accent);
+            lnf.setColour (juce::TextButton::textColourOffId,  juce::Colours::white);
+            lnf.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+            lnf.setColour (juce::Label::textColourId,          theme::ink);
+           #if VG_HAS_BUNDLED_FONT
+            lnf.setDefaultSansSerifTypeface (theme::bundledTypeface (false));
+           #else
+            lnf.setDefaultSansSerifTypefaceName (theme::fontFamily);
+           #endif
+            setLookAndFeel (&lnf);
 
             setInterceptsMouseClicks (true, true);
 
@@ -64,19 +78,20 @@ namespace licensing
             buyLink.setButtonText ("Don't have a key? Buy a license");
             buyLink.setColour (juce::HyperlinkButton::textColourId, theme::accent);
             buyLink.setFont (theme::font (13.0f, false), false);
-            buyLink.setURL (juce::URL (kStoreUrl));
+            buyLink.setURL (juce::URL (buyUrlFor (productCode)));
             addAndMakeVisible (buyLink);
 
             // Attach to the editor and track its size.
             parent.addChildComponent (this);
             parent.addComponentListener (this);
             setBounds (parent.getLocalBounds());
-            setVisible (! LicenseManager::getInstance().isActivated());
+            setVisible (! LicenseManager::getInstance().isUnlocked (productCode));
             toFront (false);
         }
 
         ~LicenseGate() override
         {
+            setLookAndFeel (nullptr);
             parent.removeComponentListener (this);
         }
 
@@ -149,6 +164,7 @@ namespace licensing
 
         juce::Component& parent;
 
+        juce::LookAndFeel_V4  lnf;
         juce::TextEditor      keyField;
         juce::TextButton      activateBtn;
         juce::Label           status;

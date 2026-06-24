@@ -20,7 +20,11 @@ public:
         setColour (juce::PopupMenu::textColourId, theme::ink);
         setColour (juce::PopupMenu::highlightedBackgroundColourId, theme::accent);
         setColour (juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+       #if VG_HAS_BUNDLED_FONT
+        setDefaultSansSerifTypeface (theme::bundledTypeface (false));
+       #else
         setDefaultSansSerifTypefaceName (theme::fontFamily);
+       #endif
     }
 
     juce::Font getLabelFont (juce::Label& l) override            { return theme::font (l.getFont().getHeight()); }

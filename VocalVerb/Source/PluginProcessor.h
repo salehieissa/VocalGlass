@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/Reverb.h"
 
@@ -48,6 +49,9 @@ private:
 
     Reverb engine;
     int currentProgram = 0;
+
+    // Output is muted until this plugin is activated (audio-thread-safe read).
+    licensing::ProductLicense license { "VOCALVERB" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalVerbProcessor)
 };

@@ -14,7 +14,11 @@ class EssLookAndFeel : public juce::LookAndFeel_V4
 public:
     EssLookAndFeel()
     {
+       #if VG_HAS_BUNDLED_FONT
+        setDefaultSansSerifTypeface (theme::bundledTypeface (false));
+       #else
         setDefaultSansSerifTypefaceName (theme::fontFamily);
+       #endif
 
         setColour (juce::ResizableWindow::backgroundColourId, theme::bg);
         setColour (juce::Label::textColourId, theme::ink);

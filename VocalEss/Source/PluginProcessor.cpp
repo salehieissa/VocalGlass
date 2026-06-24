@@ -111,6 +111,13 @@ void VocalEssProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 {
     juce::ScopedNoDenormals noDenormals;
 
+    // License gate: silence output until this plugin is activated.
+    if (! license.isLicensed())
+    {
+        buffer.clear();
+        return;
+    }
+
     const int numCh      = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
 

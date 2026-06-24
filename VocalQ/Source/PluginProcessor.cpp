@@ -136,6 +136,13 @@ bool VocalQProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 void VocalQProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
+
+    // License gate: silence output until this plugin is activated.
+    if (! license.isLicensed())
+    {
+        buffer.clear();
+        return;
+    }
     const int numCh = buffer.getNumChannels();
     const int n     = buffer.getNumSamples();
 

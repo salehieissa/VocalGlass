@@ -13,7 +13,11 @@ class KnobLookAndFeel : public juce::LookAndFeel_V4
 public:
     KnobLookAndFeel()
     {
+       #if VG_HAS_BUNDLED_FONT
+        setDefaultSansSerifTypeface (theme::bundledTypeface (false));
+       #else
         setDefaultSansSerifTypefaceName (theme::fontFamily);
+       #endif
 
         setColour (juce::ResizableWindow::backgroundColourId, theme::bg);
         setColour (juce::Slider::textBoxTextColourId, theme::inkSoft);

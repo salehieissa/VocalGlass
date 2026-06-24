@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/DelayEngine.h"
 
@@ -55,6 +56,9 @@ private:
 
     std::atomic<float> displayBpm { 120.0f };
     std::atomic<float> displayMs  { 350.0f };
+
+    // Output is muted until this plugin is activated (audio-thread-safe read).
+    licensing::ProductLicense license { "VOCALDELAY" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalDelayProcessor)
 };

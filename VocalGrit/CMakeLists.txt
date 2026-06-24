@@ -57,3 +57,25 @@ target_link_libraries(VocalGrit
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+# ---------------------------------------------------------------------------
+# Optional bundled UI font. Drop SFProDisplay.ttf (and optionally
+# SFProDisplayBold.ttf) into <repo>/fonts/ and it gets embedded in the binary
+# so the UI looks identical on Windows + macOS. If the files aren't present the
+# plugin still builds and falls back to the system font by name.
+# ---------------------------------------------------------------------------
+set(VG_FONTS_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/../fonts")
+set(VG_FONT_REG   "${VG_FONTS_DIR}/SFProDisplay.ttf")
+set(VG_FONT_BOLD  "${VG_FONTS_DIR}/SFProDisplayBold.ttf")
+if(EXISTS "${VG_FONT_REG}")
+    set(VG_FONT_SOURCES "${VG_FONT_REG}")
+    if(EXISTS "${VG_FONT_BOLD}")
+        list(APPEND VG_FONT_SOURCES "${VG_FONT_BOLD}")
+    endif()
+    juce_add_binary_data(VocalGritFonts SOURCES ${VG_FONT_SOURCES})
+    target_link_libraries(VocalGrit PRIVATE VocalGritFonts)
+    target_compile_definitions(VocalGrit PUBLIC VG_HAS_BUNDLED_FONT=1)
+    if(EXISTS "${VG_FONT_BOLD}")
+        target_compile_definitions(VocalGrit PUBLIC VG_HAS_BUNDLED_FONT_BOLD=1)
+    endif()
+endif()

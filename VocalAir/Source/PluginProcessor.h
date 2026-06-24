@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/AirEnhancer.h"
 
@@ -56,6 +57,9 @@ private:
     std::atomic<float>* trimPtr    = nullptr;
 
     int currentProgram = 0;
+
+    // Output is muted until this plugin is activated (audio-thread-safe read).
+    licensing::ProductLicense license { "VOCALAIR" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalAirProcessor)
 };

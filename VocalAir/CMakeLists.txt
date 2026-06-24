@@ -48,3 +48,20 @@ target_link_libraries(VocalAir
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags
 )
+
+# --- optional bundled UI font (drop SFProDisplay.ttf into <repo>/fonts/) ---
+set(VG_FONTS_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/../fonts")
+set(VG_FONT_REG   "${VG_FONTS_DIR}/SFProDisplay.ttf")
+set(VG_FONT_BOLD  "${VG_FONTS_DIR}/SFProDisplayBold.ttf")
+if(EXISTS "${VG_FONT_REG}")
+    set(VG_FONT_SOURCES "${VG_FONT_REG}")
+    if(EXISTS "${VG_FONT_BOLD}")
+        list(APPEND VG_FONT_SOURCES "${VG_FONT_BOLD}")
+    endif()
+    juce_add_binary_data(VocalAirFonts SOURCES ${VG_FONT_SOURCES})
+    target_link_libraries(VocalAir PRIVATE VocalAirFonts)
+    target_compile_definitions(VocalAir PUBLIC VG_HAS_BUNDLED_FONT=1)
+    if(EXISTS "${VG_FONT_BOLD}")
+        target_compile_definitions(VocalAir PUBLIC VG_HAS_BUNDLED_FONT_BOLD=1)
+    endif()
+endif()

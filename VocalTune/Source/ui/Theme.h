@@ -2,6 +2,10 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#if VG_HAS_BUNDLED_FONT
+ #include "BinaryData.h"   // generated when a font is dropped into <repo>/fonts/
+#endif
+
 //==============================================================================
 // Shared visual language for the "vocal" plugin family — a premium light look
 // built from technique (layered shadows, material gradients, fine engraving)
@@ -43,10 +47,33 @@ namespace theme
     // ---- type ---------------------------------------------------------------
     const juce::String fontFamily { "SF Pro Display" };
 
+   #if VG_HAS_BUNDLED_FONT
+    inline juce::Typeface::Ptr bundledTypeface (bool bold)
+    {
+        static juce::Typeface::Ptr regular =
+            juce::Typeface::createSystemTypefaceFor (BinaryData::SFProDisplay_ttf,
+                                                     (size_t) BinaryData::SFProDisplay_ttfSize);
+       #if VG_HAS_BUNDLED_FONT_BOLD
+        static juce::Typeface::Ptr boldFace =
+            juce::Typeface::createSystemTypefaceFor (BinaryData::SFProDisplayBold_ttf,
+                                                     (size_t) BinaryData::SFProDisplayBold_ttfSize);
+        return bold ? boldFace : regular;
+       #else
+        juce::ignoreUnused (bold);
+        return regular;
+       #endif
+    }
+   #endif
+
     inline juce::Font font (float size, bool bold = false)
     {
+       #if VG_HAS_BUNDLED_FONT
+        return juce::Font (juce::FontOptions().withTypeface (bundledTypeface (bold))
+                                              .withHeight (size));
+       #else
         return juce::Font (juce::FontOptions (fontFamily, size,
                                               bold ? juce::Font::bold : juce::Font::plain));
+       #endif
     }
 
     // Letter-spaced text (premium small-caps style labels). Draws each glyph

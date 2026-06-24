@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/Maximizer.h"
 
@@ -49,6 +50,9 @@ private:
     std::atomic<float>* amountPtr = nullptr;
     std::atomic<float>* modePtr   = nullptr;
     int currentProgram = 0;
+
+    // Output is muted until this plugin is activated (audio-thread-safe read).
+    licensing::ProductLicense license { "VOCALKNOB" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalKnobProcessor)
 };

@@ -8,6 +8,7 @@
 #include "dsp/Delay.h"
 #include "dsp/ReverbModule.h"
 #include "dsp/Glitch.h"
+#include "licensing/LicenseManager.h"
 
 //==============================================================================
 // VocalGrit — a small vocal effects chain.
@@ -110,6 +111,9 @@ private:
 
     int currentProgram = 0;
     void applyProgram (int index);
+
+    // Output is muted until this plugin is activated (audio-thread-safe read).
+    licensing::ProductLicense license { "VOCALGRIT" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalGritProcessor)
 };

@@ -271,6 +271,15 @@ void VocalGritProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 {
     juce::ScopedNoDenormals noDenormals;
 
+    // License gate: silence output until this plugin is activated.
+    if (! license.isLicensed())
+    {
+        buffer.clear();
+        inputLevel.store (0.0f);
+        outputLevel.store (0.0f);
+        return;
+    }
+
     const int numCh      = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
 

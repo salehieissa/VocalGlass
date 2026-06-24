@@ -88,6 +88,13 @@ bool VocalDoublerProcessor::isBusesLayoutSupported (const BusesLayout& layouts) 
 void VocalDoublerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
+
+    // License gate: silence output until this plugin is activated.
+    if (! license.isLicensed())
+    {
+        buffer.clear();
+        return;
+    }
     const int n = buffer.getNumSamples();
 
     for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)

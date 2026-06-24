@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/EQBand.h"
 #include "dsp/SpectrumAnalyzer.h"
@@ -97,6 +98,9 @@ private:
     double currentSampleRate = 44100.0;
     double eqDesignRate = 44100.0;
     int currentProgram = 0;
+
+    // Output is muted until this plugin is activated (audio-thread-safe read).
+    licensing::ProductLicense license { "VOCALQ" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalQProcessor)
 };
