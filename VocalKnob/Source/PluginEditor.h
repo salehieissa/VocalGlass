@@ -6,6 +6,7 @@
 #include "ui/Bounce.h"
 #include "ui/KnobLookAndFeel.h"
 #include "ui/KnobDial.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 #include <array>
 
 //==============================================================================
@@ -39,6 +40,9 @@ private:
     juce::Label presetName;
 
     juce::Rectangle<int> cardArea, presetPill;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalKnob" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalKnobEditor)
 };

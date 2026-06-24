@@ -103,6 +103,10 @@ Vocal2AEditor::Vocal2AEditor (Vocal2AProcessor& p)
 
     startTimerHz (30);
     setSize (1024, 650);
+
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 Vocal2AEditor::~Vocal2AEditor()
@@ -228,6 +232,8 @@ void Vocal2AEditor::paint (juce::Graphics& g)
 //==============================================================================
 void Vocal2AEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     auto r = getLocalBounds().reduced (16);
     cardArea = r;
 

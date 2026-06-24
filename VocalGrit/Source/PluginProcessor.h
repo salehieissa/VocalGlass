@@ -9,6 +9,8 @@
 #include "dsp/ReverbModule.h"
 #include "dsp/Glitch.h"
 
+#include "../../common/Licensing/LicenseManager.h"
+
 //==============================================================================
 // VocalGrit — a small vocal effects chain.
 //
@@ -60,6 +62,10 @@ public:
     // Live metering (linear peak, 0..1+). Read by the editor's meters.
     std::atomic<float> inputLevel  { 0.0f };
     std::atomic<float> outputLevel { 0.0f };
+
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalGrit" };
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

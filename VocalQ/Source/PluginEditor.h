@@ -8,6 +8,7 @@
 #include "ui/EQDisplay.h"
 #include "ui/Glyph.h"
 #include "ui/Bounce.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 
 //==============================================================================
 // A band-selector tab: shows a number (1-6) or a filter glyph, pink when active.
@@ -173,6 +174,9 @@ private:
 
     juce::Rectangle<int> panelArea, displayArea;
     int divX1 = 0, divX2 = 0;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalQ" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalQEditor)
 };

@@ -28,6 +28,9 @@ VocalGritProcessor::VocalGritProcessor()
         2,                                                    // factor = 2^2 = 4x
         juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
         true);                                                // max quality
+
+    // Load any cached activation and validate online in the background.
+    license.loadCachedAndValidate();
 }
 
 //==============================================================================
@@ -277,6 +280,10 @@ void VocalGritProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // Clear any output channels the host gave us beyond our inputs.
     for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, numSamples);
+
+    // License gate: until activated, pass audio through clean (no processing).
+    if (! license.isActivated())
+        return;
 
     // Input metering (peak of the incoming signal).
     inputLevel.store (buffer.getMagnitude (0, numSamples));
@@ -771,16 +778,7 @@ void VocalGritProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts.state.getType()))
-        {
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
-
-            // Re-broadcast discrete params at their snapped value so the host's
-            // normalized cache reports an exact step (state-restoration correctness).
-            for (auto* p : getParameters())
-                if (const int steps = p->getNumSteps(); p->isDiscrete() && steps > 1)
-                    p->setValueNotifyingHost ((float) juce::roundToInt (p->getValue() * (float) (steps - 1))
-                                              / (float) (steps - 1));
-        }
 }
 
 //==============================================================================

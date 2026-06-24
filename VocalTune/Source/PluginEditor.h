@@ -12,6 +12,7 @@
 #include "ui/ToggleSwitch.h"
 #include "ui/SegmentedControl.h"
 #include "ui/IconButton.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 #include <array>
 #include <memory>
 
@@ -88,6 +89,9 @@ private:
     juce::Rectangle<int> leftCard, rightCard, iconCard, presetPill;
     juce::Rectangle<int> retuneBoxR, humanizeBoxR, flexBoxR;
     int editLineY = 0, detuneDividerY = 0;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalTune" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalTuneEditor)
 };

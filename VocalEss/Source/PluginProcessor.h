@@ -3,6 +3,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 
+#include "../../common/Licensing/LicenseManager.h"
+
 //==============================================================================
 // VocalEss — a de-esser / dynamic sibilance controller.
 //
@@ -47,6 +49,10 @@ public:
     std::atomic<float> attenDb   { 0.0f };    // gain reduction (>= 0)
     std::atomic<float> outLDb    { -100.0f };
     std::atomic<float> outRDb    { -100.0f };
+
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalEss" };
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

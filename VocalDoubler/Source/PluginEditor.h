@@ -10,6 +10,7 @@
 #include "ui/EffectOnlyButton.h"
 #include "ui/TopBarButton.h"
 #include "ui/ModRateControl.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 
 //==============================================================================
 class VocalDoublerEditor : public juce::AudioProcessorEditor,
@@ -61,6 +62,9 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> modSyncAtt;
 
     juce::Rectangle<int> cardArea;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalDoubler" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalDoublerEditor)
 };

@@ -31,6 +31,9 @@ VocalQProcessor::VocalQProcessor()
       apvts (*this, nullptr, "PARAMS", createParameterLayout())
 {
     cacheParamPointers();
+
+    // Load any cached activation and validate online in the background.
+    license.loadCachedAndValidate();
 }
 
 void VocalQProcessor::cacheParamPointers()
@@ -141,6 +144,10 @@ void VocalQProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
     for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, n);
+
+    // License gate: until activated, pass audio through clean (no processing).
+    if (! license.isActivated())
+        return;
 
     // Feed the live analyzer with the unprocessed input.
     analyzer.pushBlock (buffer);
@@ -343,16 +350,7 @@ void VocalQProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts.state.getType()))
-        {
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
-
-            // Re-broadcast discrete params at their snapped value so the host's
-            // normalized cache reports an exact step (state-restoration correctness).
-            for (auto* p : getParameters())
-                if (const int steps = p->getNumSteps(); p->isDiscrete() && steps > 1)
-                    p->setValueNotifyingHost ((float) juce::roundToInt (p->getValue() * (float) (steps - 1))
-                                              / (float) (steps - 1));
-        }
 }
 
 //==============================================================================

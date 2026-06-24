@@ -132,6 +132,10 @@ VocalVerbEditor::VocalVerbEditor (VocalVerbProcessor& p)
 
     startTimerHz (24);
     setSize (1024, 640);
+
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 VocalVerbEditor::~VocalVerbEditor()
@@ -249,6 +253,8 @@ void VocalVerbEditor::paint (juce::Graphics& g)
 //==============================================================================
 void VocalVerbEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     auto area = getLocalBounds();
 
     // ---- top bar ----

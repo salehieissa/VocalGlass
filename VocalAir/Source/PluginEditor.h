@@ -9,6 +9,7 @@
 #include "ui/IconButton.h"
 #include "ui/ArcMeter.h"
 #include "ui/AirKnob.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 
 //==============================================================================
 class VocalAirEditor : public juce::AudioProcessorEditor,
@@ -66,6 +67,9 @@ private:
 
     // layout rectangles
     juce::Rectangle<int> displayCard;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalAir" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalAirEditor)
 };

@@ -4,6 +4,8 @@
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/OptoLeveler.h"
 
+#include "../../common/Licensing/LicenseManager.h"
+
 //==============================================================================
 // Vocal2A — an LA-2A-style optical vocal leveler. One detection-driven opto
 // cell with program-dependent release, compress/limit ratios, auto makeup,
@@ -40,6 +42,10 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
     OptoLeveler engine;
+
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "Vocal2A" };
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

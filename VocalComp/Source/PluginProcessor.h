@@ -4,6 +4,8 @@
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/Compressor.h"
 
+#include "../../common/Licensing/LicenseManager.h"
+
 //==============================================================================
 // VocalComp — a feed-forward vocal compressor with three voicings (ARC / Opto /
 // Warm), parallel mix, makeup gain and output trim, plus live input / output /
@@ -40,6 +42,10 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
     Compressor engine;
+
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalComp" };
 
 private:
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling; // 4x, anti-alias Warm saturation

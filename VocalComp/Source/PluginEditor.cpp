@@ -131,6 +131,10 @@ VocalCompEditor::VocalCompEditor (VocalCompProcessor& p)
 
     startTimerHz (30);
     setSize (820, 500);
+
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 VocalCompEditor::~VocalCompEditor()
@@ -260,6 +264,8 @@ void VocalCompEditor::paint (juce::Graphics& g)
 //==============================================================================
 void VocalCompEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     auto bounds = getLocalBounds();
     auto outer = bounds.reduced (20, 16);
 

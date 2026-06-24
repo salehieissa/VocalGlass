@@ -10,6 +10,7 @@
 #include "ui/DisplayCard.h"
 #include "ui/TapButton.h"
 #include "ui/LinkButton.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 #include <array>
 #include <vector>
 
@@ -76,6 +77,9 @@ private:
 
     // tap-tempo state
     std::vector<double> tapTimes;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalDelay" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalDelayEditor)
 };

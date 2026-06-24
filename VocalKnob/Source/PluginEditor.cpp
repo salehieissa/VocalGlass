@@ -74,6 +74,10 @@ VocalKnobEditor::VocalKnobEditor (VocalKnobProcessor& p)
 
     startTimerHz (30);
     setSize (700, 480);
+
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 VocalKnobEditor::~VocalKnobEditor()
@@ -160,6 +164,8 @@ void VocalKnobEditor::paint (juce::Graphics& g)
 //==============================================================================
 void VocalKnobEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     auto r = getLocalBounds().reduced (12);
     cardArea = r;
 

@@ -6,6 +6,7 @@
 #include "ui/Bounce.h"
 #include "ui/KnobLookAndFeel.h"
 #include "ui/Knob.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 #include <array>
 #include <memory>
 
@@ -118,6 +119,9 @@ private:
     juce::Rectangle<int> leftCard, dampCard, shapeCard, diffCard, modCard, eqCard;
     juce::Rectangle<int> bottomBar, arrowBox;
     int leftDividerY = 0;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalVerb" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalVerbEditor)
 };

@@ -5,6 +5,8 @@
 #include "dsp/PitchCorrector.h"
 #include <array>
 
+#include "../../common/Licensing/LicenseManager.h"
+
 //==============================================================================
 // VocalTune — real-time pitch correction (autotune). YIN detection + a
 // time-domain granular pitch shifter snap sung notes onto an editable scale.
@@ -49,6 +51,10 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
     juce::UndoManager undo;
+
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalTune" };
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

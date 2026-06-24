@@ -4,6 +4,8 @@
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/Doubler.h"
 
+#include "../../common/Licensing/LicenseManager.h"
+
 //==============================================================================
 // VocalDoubler — an iZotope-style vocal doubler. A bank of modulated short
 // delay lines generates several "extra takes" of the voice that are panned
@@ -45,6 +47,10 @@ public:
     // Soft bypass driven by the editor's Bypass button (not an automatable
     // parameter): when engaged the dry signal passes through untouched.
     std::atomic<bool> bypassed { false };
+
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalDoubler" };
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

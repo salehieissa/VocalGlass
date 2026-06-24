@@ -4,6 +4,8 @@
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/AirEnhancer.h"
 
+#include "../../common/Licensing/LicenseManager.h"
+
 //==============================================================================
 // VocalAir — an airy high-frequency exciter / enhancer. Two dynamic bands
 // ("mid air" presence + "high air" sheen) feed a harmonic exciter, with a link
@@ -42,6 +44,10 @@ public:
 
     juce::UndoManager undoManager;
     juce::AudioProcessorValueTreeState apvts;
+
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalAir" };
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

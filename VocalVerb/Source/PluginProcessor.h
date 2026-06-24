@@ -4,6 +4,8 @@
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/Reverb.h"
 
+#include "../../common/Licensing/LicenseManager.h"
+
 //==============================================================================
 // VocalVerb — an algorithmic Dattorro-style plate / hall reverb tuned for
 // vocals, with a rich control set (decay, size, predelay, in-loop damping
@@ -40,6 +42,10 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState apvts;
+
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalVerb" };
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

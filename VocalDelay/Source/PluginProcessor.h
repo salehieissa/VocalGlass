@@ -4,6 +4,8 @@
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/DelayEngine.h"
 
+#include "../../common/Licensing/LicenseManager.h"
+
 //==============================================================================
 // VocalDelay — a tempo-syncable stereo delay for vocals. Sync to host, an
 // internal/tap BPM, or free milliseconds; four routing modes; feedback-path
@@ -45,6 +47,10 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
     DelayEngine engine;
+
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalDelay" };
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

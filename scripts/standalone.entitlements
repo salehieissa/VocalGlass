@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Standalone vocal apps record audio, so they need mic access under the
+         hardened runtime. (Plugins themselves are sanboxed by the host and do
+         not get this entitlement.) -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+
+    <!-- Allow the standalone's JIT/closures used by some JUCE/graphics paths. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+</dict>
+</plist>

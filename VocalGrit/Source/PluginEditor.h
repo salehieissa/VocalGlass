@@ -6,6 +6,7 @@
 #include "ui/GritDial.h"
 #include "ui/LevelMeter.h"
 #include "ui/Bounce.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 
 using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
 using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
@@ -112,6 +113,9 @@ private:
     juce::Rectangle<int> rightCardArea, presetArea;
     std::array<juce::Rectangle<int>, 4> fxAreas;
     float pulsePhase = 0.0f;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalGrit" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalGritEditor)
 };

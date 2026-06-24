@@ -6,6 +6,7 @@
 #include "ui/Meters.h"
 #include "ui/Controls.h"
 #include "ui/Bounce.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 
 using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
 using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
@@ -55,6 +56,9 @@ private:
     std::array<juce::Rectangle<int>, 4> leftCards;
     juce::Rectangle<int> centerCard, rightCard;
     juce::Rectangle<int> threshScaleArea, attenScaleArea, outScaleArea;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalEss" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalEssEditor)
 };

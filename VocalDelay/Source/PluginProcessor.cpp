@@ -37,6 +37,8 @@ VocalDelayProcessor::VocalDelayProcessor()
         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", createParameterLayout())
 {
+    // Load any cached activation and validate online in the background.
+    license.loadCachedAndValidate();
 }
 
 //==============================================================================
@@ -128,6 +130,10 @@ void VocalDelayProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
     for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, n);
+
+    // License gate: until activated, pass audio through clean (no processing).
+    if (! license.isActivated())
+        return;
 
     const int   syncMode = (int) apvts.getRawParameterValue ("syncMode")->load();
     const int   divIdx   = juce::jlimit (0, (int) kDivisions.size() - 1,
@@ -310,16 +316,7 @@ void VocalDelayProcessor::getStateInformation (juce::MemoryBlock& destData)
 void VocalDelayProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
-    {
         apvts.replaceState (juce::ValueTree::fromXml (*xml));
-
-        // Re-broadcast discrete params at their snapped value so the host's
-        // normalized cache reports an exact step (state-restoration correctness).
-        for (auto* p : getParameters())
-            if (const int steps = p->getNumSteps(); p->isDiscrete() && steps > 1)
-                p->setValueNotifyingHost ((float) juce::roundToInt (p->getValue() * (float) (steps - 1))
-                                          / (float) (steps - 1));
-    }
 }
 
 //==============================================================================

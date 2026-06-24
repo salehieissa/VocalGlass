@@ -259,6 +259,10 @@ VocalGritEditor::VocalGritEditor (VocalGritProcessor& p)
 
     startTimerHz (30);
     setSize (1000, 808);
+
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 VocalGritEditor::~VocalGritEditor()
@@ -411,6 +415,8 @@ void VocalGritEditor::paint (juce::Graphics& g)
 
 void VocalGritEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     auto content = getLocalBounds().reduced (24);
 
     // Header (wordmark drawn in paint; preset box centred)

@@ -7,6 +7,7 @@
 #include "ui/KnobLookAndFeel.h"
 #include "ui/MeterBar.h"
 #include "ui/CurveDisplay.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 #include <array>
 #include <memory>
 
@@ -68,6 +69,9 @@ private:
 
     // layout rects painted in paint()
     juce::Rectangle<int> mainCard, curveCard, modeContainer, bottomStrip;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalComp" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalCompEditor)
 };

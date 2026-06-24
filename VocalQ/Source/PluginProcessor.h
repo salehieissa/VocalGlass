@@ -5,6 +5,8 @@
 #include "dsp/EQBand.h"
 #include "dsp/SpectrumAnalyzer.h"
 
+#include "../../common/Licensing/LicenseManager.h"
+
 //==============================================================================
 // VocalQ — an 8-band dynamic vocal EQ.
 //
@@ -51,6 +53,10 @@ public:
     // UI state shared with the editor.
     std::atomic<int>   soloBand { -1 };
     std::atomic<float> outLDb { -100.0f }, outRDb { -100.0f };
+
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalQ" };
 
     // Live input spectrum for the response display.
     SpectrumAnalyzer analyzer;
