@@ -115,7 +115,8 @@ private:
     float pulsePhase = 0.0f;
 
     // Full-editor "enter your license key" overlay (shown until activated).
-    ActivationOverlay licenseOverlay { proc.license, "VocalGrit" };
+    ActivationOverlay licenseOverlay { proc.license, "VocalGrit", "https://vocalessential.com",
+                                       [] (float h, bool b) { return theme::font (h, b); } };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalGritEditor)
 };

@@ -69,7 +69,8 @@ private:
     juce::Rectangle<int> brandBounds, brandSubBounds;
 
     // Full-editor "enter your license key" overlay (shown until activated).
-    ActivationOverlay licenseOverlay { proc.license, "Vocal2A" };
+    ActivationOverlay licenseOverlay { proc.license, "Vocal2A", "https://vocalessential.com",
+                                       [] (float h, bool b) { return theme::font (h, b); } };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Vocal2AEditor)
 };

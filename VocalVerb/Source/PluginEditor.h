@@ -121,7 +121,8 @@ private:
     int leftDividerY = 0;
 
     // Full-editor "enter your license key" overlay (shown until activated).
-    ActivationOverlay licenseOverlay { proc.license, "VocalVerb" };
+    ActivationOverlay licenseOverlay { proc.license, "VocalVerb", "https://vocalessential.com",
+                                       [] (float h, bool b) { return theme::font (h, b); } };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalVerbEditor)
 };

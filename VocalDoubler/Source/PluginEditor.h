@@ -64,7 +64,8 @@ private:
     juce::Rectangle<int> cardArea;
 
     // Full-editor "enter your license key" overlay (shown until activated).
-    ActivationOverlay licenseOverlay { proc.license, "VocalDoubler" };
+    ActivationOverlay licenseOverlay { proc.license, "VocalDoubler", "https://vocalessential.com",
+                                       [] (float h, bool b) { return theme::font (h, b); } };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalDoublerEditor)
 };

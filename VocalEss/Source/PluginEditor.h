@@ -58,7 +58,8 @@ private:
     juce::Rectangle<int> threshScaleArea, attenScaleArea, outScaleArea;
 
     // Full-editor "enter your license key" overlay (shown until activated).
-    ActivationOverlay licenseOverlay { proc.license, "VocalEss" };
+    ActivationOverlay licenseOverlay { proc.license, "VocalEss", "https://vocalessential.com",
+                                       [] (float h, bool b) { return theme::font (h, b); } };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalEssEditor)
 };

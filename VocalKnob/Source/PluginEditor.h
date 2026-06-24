@@ -42,7 +42,8 @@ private:
     juce::Rectangle<int> cardArea, presetPill;
 
     // Full-editor "enter your license key" overlay (shown until activated).
-    ActivationOverlay licenseOverlay { proc.license, "VocalKnob" };
+    ActivationOverlay licenseOverlay { proc.license, "VocalKnob", "https://vocalessential.com",
+                                       [] (float h, bool b) { return theme::font (h, b); } };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalKnobEditor)
 };

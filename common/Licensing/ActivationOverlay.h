@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "LicenseManager.h"
+#include <functional>
 
 //==============================================================================
 // Full-editor overlay shown while a plugin is NOT activated (hard lock).
@@ -12,15 +13,21 @@
 class ActivationOverlay : public juce::Component
 {
 public:
+    // fontProvider lets the host plugin supply its UI font (e.g. a bundled
+    // typeface on Windows). When null, falls back to the "SF Pro Display" system
+    // font name (correct on macOS). Signature: (height, bold) -> Font.
     ActivationOverlay (LicenseManager& lm, juce::String pluginDisplayName,
-                       juce::String storeUrl = "https://vocalessential.com")
-        : license (lm), pluginName (std::move (pluginDisplayName)), store (std::move (storeUrl))
+                       juce::String storeUrl = "https://vocalessential.com",
+                       std::function<juce::Font (float, bool)> fontProvider = {})
+        : license (lm), pluginName (std::move (pluginDisplayName)), store (std::move (storeUrl)),
+          fontFn (std::move (fontProvider))
     {
+        lnf.fontFn = fontFn;
         setLookAndFeel (&lnf);
 
         title.setText (pluginName, juce::dontSendNotification);
         title.setJustificationType (juce::Justification::centred);
-        title.setFont (sf (26.0f, juce::Font::bold));
+        title.setFont (sf (26.0f, true));
         title.setColour (juce::Label::textColourId, ink);
         addAndMakeVisible (title);
 
@@ -147,19 +154,26 @@ private:
         void drawButtonText (juce::Graphics& g, juce::TextButton& b, bool over, bool) override
         {
             const bool primary = (bool) b.getProperties()["primary"];
-            g.setFont (juce::Font (juce::FontOptions ("SF Pro Display",
-                                   primary ? 16.0f : 13.0f,
-                                   primary ? juce::Font::bold : juce::Font::plain)));
+            const float h = primary ? 16.0f : 13.0f;
+            g.setFont (fontFn ? fontFn (h, primary)
+                              : juce::Font (juce::FontOptions ("SF Pro Display", h,
+                                            primary ? juce::Font::bold : juce::Font::plain)));
             g.setColour (primary ? juce::Colours::white
                                  : (over ? juce::Colour (0xffec0f8f) : juce::Colour (0xff8b8b96)));
             g.drawText (b.getButtonText(), b.getLocalBounds(), juce::Justification::centred, false);
         }
+
+        std::function<juce::Font (float, bool)> fontFn;
     };
 
-    static juce::Font sf (float h, int style = juce::Font::plain)
+    juce::Font sf (float h, bool bold = false) const
     {
-        return juce::Font (juce::FontOptions ("SF Pro Display", h, style));
+        if (fontFn) return fontFn (h, bold);
+        return juce::Font (juce::FontOptions ("SF Pro Display", h,
+                                              bold ? juce::Font::bold : juce::Font::plain));
     }
+
+    std::function<juce::Font (float, bool)> fontFn;
 
     juce::Rectangle<int> getCardBounds() const
     {
