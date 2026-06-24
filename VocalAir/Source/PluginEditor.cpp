@@ -189,6 +189,8 @@ VocalAirEditor::VocalAirEditor (VocalAirProcessor& p)
 
     startTimerHz (30);
     setSize (1024, 640);
+
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalAir", "VOCALAIR");
 }
 
 VocalAirEditor::~VocalAirEditor()

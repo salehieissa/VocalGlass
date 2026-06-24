@@ -62,6 +62,8 @@ VocalEssEditor::VocalEssEditor (VocalEssProcessor& p)
 
     startTimerHz (30);
     setSize (680, 500);
+
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalEss", "VOCALESS");
 }
 
 VocalEssEditor::~VocalEssEditor()

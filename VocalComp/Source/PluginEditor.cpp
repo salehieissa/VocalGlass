@@ -131,6 +131,8 @@ VocalCompEditor::VocalCompEditor (VocalCompProcessor& p)
 
     startTimerHz (30);
     setSize (820, 500);
+
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalComp", "VOCALCOMP");
 }
 
 VocalCompEditor::~VocalCompEditor()

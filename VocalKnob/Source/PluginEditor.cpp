@@ -74,6 +74,8 @@ VocalKnobEditor::VocalKnobEditor (VocalKnobProcessor& p)
 
     startTimerHz (30);
     setSize (700, 480);
+
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalKnob", "VOCALKNOB");
 }
 
 VocalKnobEditor::~VocalKnobEditor()

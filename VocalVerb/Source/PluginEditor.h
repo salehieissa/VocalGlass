@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
+#include "licensing/LicenseGate.h"
 #include "ui/Theme.h"
 #include "ui/Bounce.h"
 #include "ui/KnobLookAndFeel.h"
@@ -118,6 +119,8 @@ private:
     juce::Rectangle<int> leftCard, dampCard, shapeCard, diffCard, modCard, eqCard;
     juce::Rectangle<int> bottomBar, arrowBox;
     int leftDividerY = 0;
+
+    std::unique_ptr<licensing::LicenseGate> licenseGate;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalVerbEditor)
 };

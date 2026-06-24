@@ -132,6 +132,8 @@ VocalVerbEditor::VocalVerbEditor (VocalVerbProcessor& p)
 
     startTimerHz (24);
     setSize (1024, 640);
+
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalVerb", "VOCALVERB");
 }
 
 VocalVerbEditor::~VocalVerbEditor()

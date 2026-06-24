@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
+#include "licensing/LicenseGate.h"
 #include "ui/Theme.h"
 #include "ui/Bounce.h"
 #include "ui/KnobLookAndFeel.h"
@@ -76,6 +77,8 @@ private:
 
     // tap-tempo state
     std::vector<double> tapTimes;
+
+    std::unique_ptr<licensing::LicenseGate> licenseGate;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalDelayEditor)
 };

@@ -161,6 +161,8 @@ VocalTuneEditor::VocalTuneEditor (VocalTuneProcessor& p)
 
     startTimerHz (30);
     setSize (1024, 640);
+
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalTune", "VOCALTUNE");
 }
 
 VocalTuneEditor::~VocalTuneEditor()

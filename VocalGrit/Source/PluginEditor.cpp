@@ -259,6 +259,10 @@ VocalGritEditor::VocalGritEditor (VocalGritProcessor& p)
 
     startTimerHz (30);
     setSize (1000, 808);
+
+    // --- license activation overlay ---
+    // Store URL + Keygen account live in licensing/LicenseConfig.h.
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalGrit", "VOCALGRIT");
 }
 
 VocalGritEditor::~VocalGritEditor()

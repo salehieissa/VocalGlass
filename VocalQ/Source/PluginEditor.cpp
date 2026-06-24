@@ -128,6 +128,8 @@ VocalQEditor::VocalQEditor (VocalQProcessor& p)
     bindBand (selectedBand);
     startTimerHz (30);
     setSize (1024, 740);
+
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalQ", "VOCALQ");
 }
 
 VocalQEditor::~VocalQEditor()

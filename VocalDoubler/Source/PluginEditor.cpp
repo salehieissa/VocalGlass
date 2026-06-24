@@ -76,6 +76,8 @@ VocalDoublerEditor::VocalDoublerEditor (VocalDoublerProcessor& p)
 
     startTimerHz (30);
     setSize (1024, 640);
+
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalDoubler", "VOCALDOUBLER");
 }
 
 VocalDoublerEditor::~VocalDoublerEditor()

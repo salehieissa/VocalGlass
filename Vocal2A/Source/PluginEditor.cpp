@@ -103,6 +103,8 @@ Vocal2AEditor::Vocal2AEditor (Vocal2AProcessor& p)
 
     startTimerHz (30);
     setSize (1024, 650);
+
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "Vocal2A", "VOCAL2A");
 }
 
 Vocal2AEditor::~Vocal2AEditor()

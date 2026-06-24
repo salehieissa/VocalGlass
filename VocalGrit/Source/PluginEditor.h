@@ -6,6 +6,7 @@
 #include "ui/GritDial.h"
 #include "ui/LevelMeter.h"
 #include "ui/Bounce.h"
+#include "licensing/LicenseGate.h"
 
 using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
 using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
@@ -107,6 +108,9 @@ private:
     std::unique_ptr<ButtonAtt> delaySyncAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> delayDivAtt;
     void updateDelaySyncUI();
+
+    // License activation overlay (shown until the plugin is activated).
+    std::unique_ptr<licensing::LicenseGate> licenseGate;
 
     // Geometry remembered for paint().
     juce::Rectangle<int> rightCardArea, presetArea;

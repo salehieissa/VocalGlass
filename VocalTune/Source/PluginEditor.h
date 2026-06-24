@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
+#include "licensing/LicenseGate.h"
 #include "ui/Theme.h"
 #include "ui/Bounce.h"
 #include "ui/TuneLookAndFeel.h"
@@ -88,6 +89,8 @@ private:
     juce::Rectangle<int> leftCard, rightCard, iconCard, presetPill;
     juce::Rectangle<int> retuneBoxR, humanizeBoxR, flexBoxR;
     int editLineY = 0, detuneDividerY = 0;
+
+    std::unique_ptr<licensing::LicenseGate> licenseGate;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalTuneEditor)
 };

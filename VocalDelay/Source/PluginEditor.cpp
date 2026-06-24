@@ -127,6 +127,8 @@ VocalDelayEditor::VocalDelayEditor (VocalDelayProcessor& p)
 
     startTimerHz (24);
     setSize (1024, 640);
+
+    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalDelay", "VOCALDELAY");
 }
 
 VocalDelayEditor::~VocalDelayEditor()
