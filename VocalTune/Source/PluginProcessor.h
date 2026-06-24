@@ -1,10 +1,11 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/PitchCorrector.h"
 #include <array>
+
+#include "../../common/Licensing/LicenseManager.h"
 
 //==============================================================================
 // VocalTune — real-time pitch correction (autotune). YIN detection + a
@@ -51,6 +52,10 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     juce::UndoManager undo;
 
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalTune" };
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void parameterChanged (const juce::String& id, float newValue) override;
@@ -77,9 +82,6 @@ private:
     std::atomic<bool> rescaleFlag { false };
     int currentProgram = 0;
     int reportedLatency = -1;   // last value sent to the host (re-sent only on change)
-
-    // Output is muted until this plugin is activated (audio-thread-safe read).
-    licensing::ProductLicense license { "VOCALTUNE" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalTuneProcessor)
 };

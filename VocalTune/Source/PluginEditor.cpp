@@ -162,7 +162,9 @@ VocalTuneEditor::VocalTuneEditor (VocalTuneProcessor& p)
     startTimerHz (30);
     setSize (1024, 640);
 
-    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalTune", "VOCALTUNE");
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 VocalTuneEditor::~VocalTuneEditor()
@@ -308,6 +310,8 @@ void VocalTuneEditor::paint (juce::Graphics& g)
 //==============================================================================
 void VocalTuneEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     auto r = getLocalBounds();
 
     const int margin = 16;

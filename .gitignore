@@ -28,3 +28,8 @@ Desktop.ini
 *.aaxplugin
 *.zip
 *.dmg
+*.pkg
+
+# Built installers / packaging output
+dist/
+dist-zip/

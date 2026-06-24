@@ -38,6 +38,8 @@ VocalVerbProcessor::VocalVerbProcessor()
         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", createParameterLayout())
 {
+    // Load any cached activation and validate online in the background.
+    license.loadCachedAndValidate();
 }
 
 //==============================================================================
@@ -154,17 +156,14 @@ bool VocalVerbProcessor::isBusesLayoutSupported (const BusesLayout& layouts) con
 void VocalVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
-
-    // License gate: silence output until this plugin is activated.
-    if (! license.isLicensed())
-    {
-        buffer.clear();
-        return;
-    }
     const int n = buffer.getNumSamples();
 
     for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, n);
+
+    // License gate: until activated, pass audio through clean (no processing).
+    if (! license.isActivated())
+        return;
 
     if (raw ("bypass") > 0.5f)
         return;
@@ -310,16 +309,7 @@ void VocalVerbProcessor::getStateInformation (juce::MemoryBlock& destData)
 void VocalVerbProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
-    {
         apvts.replaceState (juce::ValueTree::fromXml (*xml));
-
-        // Re-broadcast discrete params at their snapped value so the host's
-        // normalized cache reports an exact step (state-restoration correctness).
-        for (auto* p : getParameters())
-            if (const int steps = p->getNumSteps(); p->isDiscrete() && steps > 1)
-                p->setValueNotifyingHost ((float) juce::roundToInt (p->getValue() * (float) (steps - 1))
-                                          / (float) (steps - 1));
-    }
 }
 
 //==============================================================================

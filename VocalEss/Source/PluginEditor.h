@@ -2,11 +2,11 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
-#include "licensing/LicenseGate.h"
 #include "ui/EssLookAndFeel.h"
 #include "ui/Meters.h"
 #include "ui/Controls.h"
 #include "ui/Bounce.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 
 using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
 using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
@@ -57,7 +57,8 @@ private:
     juce::Rectangle<int> centerCard, rightCard;
     juce::Rectangle<int> threshScaleArea, attenScaleArea, outScaleArea;
 
-    std::unique_ptr<licensing::LicenseGate> licenseGate;
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalEss" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalEssEditor)
 };

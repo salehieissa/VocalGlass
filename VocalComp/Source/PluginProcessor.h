@@ -1,9 +1,10 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/Compressor.h"
+
+#include "../../common/Licensing/LicenseManager.h"
 
 //==============================================================================
 // VocalComp — a feed-forward vocal compressor with three voicings (ARC / Opto /
@@ -42,6 +43,10 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     Compressor engine;
 
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalComp" };
+
 private:
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling; // 4x, anti-alias Warm saturation
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -58,9 +63,6 @@ private:
     std::atomic<float>* gatePtr   = nullptr;
 
     int currentProgram = 0;
-
-    // Output is muted until this plugin is activated (audio-thread-safe read).
-    licensing::ProductLicense license { "VOCALCOMP" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalCompProcessor)
 };

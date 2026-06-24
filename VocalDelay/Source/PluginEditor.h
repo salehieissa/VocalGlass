@@ -2,7 +2,6 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
-#include "licensing/LicenseGate.h"
 #include "ui/Theme.h"
 #include "ui/Bounce.h"
 #include "ui/KnobLookAndFeel.h"
@@ -11,6 +10,7 @@
 #include "ui/DisplayCard.h"
 #include "ui/TapButton.h"
 #include "ui/LinkButton.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 #include <array>
 #include <vector>
 
@@ -78,7 +78,8 @@ private:
     // tap-tempo state
     std::vector<double> tapTimes;
 
-    std::unique_ptr<licensing::LicenseGate> licenseGate;
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalDelay" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalDelayEditor)
 };

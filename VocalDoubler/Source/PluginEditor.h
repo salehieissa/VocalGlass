@@ -2,7 +2,6 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
-#include "licensing/LicenseGate.h"
 #include "ui/Theme.h"
 #include "ui/Bounce.h"
 #include "ui/KnobLookAndFeel.h"
@@ -11,6 +10,7 @@
 #include "ui/EffectOnlyButton.h"
 #include "ui/TopBarButton.h"
 #include "ui/ModRateControl.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 
 //==============================================================================
 class VocalDoublerEditor : public juce::AudioProcessorEditor,
@@ -63,7 +63,8 @@ private:
 
     juce::Rectangle<int> cardArea;
 
-    std::unique_ptr<licensing::LicenseGate> licenseGate;
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalDoubler" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalDoublerEditor)
 };

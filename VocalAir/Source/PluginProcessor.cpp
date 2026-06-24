@@ -13,6 +13,9 @@ VocalAirProcessor::VocalAirProcessor()
     linkPtr    = apvts.getRawParameterValue ("link");
     powerPtr   = apvts.getRawParameterValue ("power");
     trimPtr    = apvts.getRawParameterValue ("trim");
+
+    // Load any cached activation and validate online in the background.
+    license.loadCachedAndValidate();
 }
 
 //==============================================================================
@@ -70,17 +73,14 @@ bool VocalAirProcessor::isBusesLayoutSupported (const BusesLayout& layouts) cons
 void VocalAirProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
-
-    // License gate: silence output until this plugin is activated.
-    if (! license.isLicensed())
-    {
-        buffer.clear();
-        return;
-    }
     const int n = buffer.getNumSamples();
 
     for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, n);
+
+    // License gate: until activated, pass audio through clean (no processing).
+    if (! license.isActivated())
+        return;
 
     engine.setParams (midAirPtr->load() * 0.01f,
                       highAirPtr->load() * 0.01f,
@@ -178,16 +178,7 @@ void VocalAirProcessor::getStateInformation (juce::MemoryBlock& destData)
 void VocalAirProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
-    {
         apvts.replaceState (juce::ValueTree::fromXml (*xml));
-
-        // Re-broadcast discrete params at their snapped value so the host's
-        // normalized cache reports an exact step (state-restoration correctness).
-        for (auto* p : getParameters())
-            if (const int steps = p->getNumSteps(); p->isDiscrete() && steps > 1)
-                p->setValueNotifyingHost ((float) juce::roundToInt (p->getValue() * (float) (steps - 1))
-                                          / (float) (steps - 1));
-    }
 }
 
 //==============================================================================

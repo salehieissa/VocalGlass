@@ -2,7 +2,6 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
-#include "licensing/LicenseGate.h"
 #include "ui/Theme.h"
 #include "ui/Bounce.h"
 #include "ui/TuneLookAndFeel.h"
@@ -13,6 +12,7 @@
 #include "ui/ToggleSwitch.h"
 #include "ui/SegmentedControl.h"
 #include "ui/IconButton.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 #include <array>
 #include <memory>
 
@@ -90,7 +90,8 @@ private:
     juce::Rectangle<int> retuneBoxR, humanizeBoxR, flexBoxR;
     int editLineY = 0, detuneDividerY = 0;
 
-    std::unique_ptr<licensing::LicenseGate> licenseGate;
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalTune" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalTuneEditor)
 };

@@ -63,7 +63,9 @@ VocalEssEditor::VocalEssEditor (VocalEssProcessor& p)
     startTimerHz (30);
     setSize (680, 500);
 
-    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalEss", "VOCALESS");
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 VocalEssEditor::~VocalEssEditor()
@@ -201,6 +203,8 @@ void VocalEssEditor::paint (juce::Graphics& g)
 //==============================================================================
 void VocalEssEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     auto content = getLocalBounds().reduced (14);
 
     auto centred = [] (juce::Rectangle<int> area, int w, int h)

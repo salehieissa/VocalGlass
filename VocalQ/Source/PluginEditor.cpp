@@ -129,7 +129,9 @@ VocalQEditor::VocalQEditor (VocalQProcessor& p)
     startTimerHz (30);
     setSize (1024, 740);
 
-    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalQ", "VOCALQ");
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 VocalQEditor::~VocalQEditor()
@@ -250,6 +252,8 @@ void VocalQEditor::paint (juce::Graphics& g)
 //==============================================================================
 void VocalQEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     auto area = getLocalBounds().reduced (18);
 
     // ---- header ----

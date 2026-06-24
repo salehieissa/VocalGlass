@@ -1,9 +1,10 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/Doubler.h"
+
+#include "../../common/Licensing/LicenseManager.h"
 
 //==============================================================================
 // VocalDoubler — an iZotope-style vocal doubler. A bank of modulated short
@@ -47,6 +48,10 @@ public:
     // parameter): when engaged the dry signal passes through untouched.
     std::atomic<bool> bypassed { false };
 
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalDoubler" };
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void applyProgram (int index);
@@ -66,9 +71,6 @@ private:
     std::atomic<float>* modSyncPtr    = nullptr;
     std::atomic<float>* modDivPtr     = nullptr;
     int currentProgram = 0;
-
-    // Output is muted until this plugin is activated (audio-thread-safe read).
-    licensing::ProductLicense license { "VOCALDOUBLER" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalDoublerProcessor)
 };

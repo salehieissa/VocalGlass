@@ -2,7 +2,6 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
-#include "licensing/LicenseGate.h"
 #include "ui/Theme.h"
 #include "ui/Bounce.h"
 #include "ui/KnobLookAndFeel.h"
@@ -10,6 +9,7 @@
 #include "ui/IconButton.h"
 #include "ui/ArcMeter.h"
 #include "ui/AirKnob.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 
 //==============================================================================
 class VocalAirEditor : public juce::AudioProcessorEditor,
@@ -68,7 +68,8 @@ private:
     // layout rectangles
     juce::Rectangle<int> displayCard;
 
-    std::unique_ptr<licensing::LicenseGate> licenseGate;
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalAir" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalAirEditor)
 };

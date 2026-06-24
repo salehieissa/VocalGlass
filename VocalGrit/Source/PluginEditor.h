@@ -6,7 +6,7 @@
 #include "ui/GritDial.h"
 #include "ui/LevelMeter.h"
 #include "ui/Bounce.h"
-#include "licensing/LicenseGate.h"
+#include "../../common/Licensing/ActivationOverlay.h"
 
 using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
 using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
@@ -109,13 +109,13 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> delayDivAtt;
     void updateDelaySyncUI();
 
-    // License activation overlay (shown until the plugin is activated).
-    std::unique_ptr<licensing::LicenseGate> licenseGate;
-
     // Geometry remembered for paint().
     juce::Rectangle<int> rightCardArea, presetArea;
     std::array<juce::Rectangle<int>, 4> fxAreas;
     float pulsePhase = 0.0f;
+
+    // Full-editor "enter your license key" overlay (shown until activated).
+    ActivationOverlay licenseOverlay { proc.license, "VocalGrit" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalGritEditor)
 };

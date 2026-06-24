@@ -190,7 +190,9 @@ VocalAirEditor::VocalAirEditor (VocalAirProcessor& p)
     startTimerHz (30);
     setSize (1024, 640);
 
-    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalAir", "VOCALAIR");
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 VocalAirEditor::~VocalAirEditor()
@@ -290,6 +292,8 @@ void VocalAirEditor::paint (juce::Graphics& g)
 //==============================================================================
 void VocalAirEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     auto r = getLocalBounds().reduced (24);
 
     // ---- top bar ----

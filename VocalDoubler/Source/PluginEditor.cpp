@@ -77,7 +77,9 @@ VocalDoublerEditor::VocalDoublerEditor (VocalDoublerProcessor& p)
     startTimerHz (30);
     setSize (1024, 640);
 
-    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalDoubler", "VOCALDOUBLER");
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 VocalDoublerEditor::~VocalDoublerEditor()
@@ -264,6 +266,8 @@ void VocalDoublerEditor::paint (juce::Graphics& g)
 //==============================================================================
 void VocalDoublerEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     auto r = getLocalBounds().reduced (14);
     cardArea = r;
 

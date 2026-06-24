@@ -128,7 +128,9 @@ VocalDelayEditor::VocalDelayEditor (VocalDelayProcessor& p)
     startTimerHz (24);
     setSize (1024, 640);
 
-    licenseGate = std::make_unique<licensing::LicenseGate> (*this, "VocalDelay", "VOCALDELAY");
+    // License overlay sits on top of everything; it shows itself until activated.
+    addChildComponent (licenseOverlay);
+    licenseOverlay.setBounds (getLocalBounds());
 }
 
 VocalDelayEditor::~VocalDelayEditor()
@@ -255,6 +257,8 @@ void VocalDelayEditor::paint (juce::Graphics& g)
 //==============================================================================
 void VocalDelayEditor::resized()
 {
+    licenseOverlay.setBounds (getLocalBounds());
+
     // ---- branding ----
     brand.setBounds (28, 22, 240, 34);
     brandSub.setBounds (30, 56, 240, 18);

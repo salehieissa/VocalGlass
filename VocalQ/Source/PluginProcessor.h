@@ -1,10 +1,11 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/EQBand.h"
 #include "dsp/SpectrumAnalyzer.h"
+
+#include "../../common/Licensing/LicenseManager.h"
 
 //==============================================================================
 // VocalQ — an 8-band dynamic vocal EQ.
@@ -53,6 +54,10 @@ public:
     std::atomic<int>   soloBand { -1 };
     std::atomic<float> outLDb { -100.0f }, outRDb { -100.0f };
 
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalQ" };
+
     // Live input spectrum for the response display.
     SpectrumAnalyzer analyzer;
 
@@ -98,9 +103,6 @@ private:
     double currentSampleRate = 44100.0;
     double eqDesignRate = 44100.0;
     int currentProgram = 0;
-
-    // Output is muted until this plugin is activated (audio-thread-safe read).
-    licensing::ProductLicense license { "VOCALQ" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalQProcessor)
 };

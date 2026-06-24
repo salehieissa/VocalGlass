@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.22)
 
+# Build a universal binary on macOS (Apple Silicon + Intel) so any host can load
+# the plugin regardless of how it's launched (e.g. FL Studio under Rosetta).
+# Ignored on non-Apple platforms. Override with -DCMAKE_OSX_ARCHITECTURES=...
+if(APPLE)
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS universal binary")
+endif()
+
 project(VocalGrit VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -38,6 +45,7 @@ target_sources(VocalGrit
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
+        ../common/Licensing/LicenseManager.cpp
 )
 
 # JUCE_DISPLAY_SPLASH_SCREEN must stay TRUE unless you have a JUCE license.

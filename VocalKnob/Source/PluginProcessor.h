@@ -1,9 +1,10 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/Maximizer.h"
+
+#include "../../common/Licensing/LicenseManager.h"
 
 //==============================================================================
 // VocalKnob — a one-knob multiband "make it sound good" maximizer for vocals,
@@ -41,6 +42,10 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalKnob" };
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void applyProgram (int index);
@@ -50,9 +55,6 @@ private:
     std::atomic<float>* amountPtr = nullptr;
     std::atomic<float>* modePtr   = nullptr;
     int currentProgram = 0;
-
-    // Output is muted until this plugin is activated (audio-thread-safe read).
-    licensing::ProductLicense license { "VOCALKNOB" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalKnobProcessor)
 };

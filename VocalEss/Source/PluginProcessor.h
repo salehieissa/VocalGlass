@@ -1,8 +1,9 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
+
+#include "../../common/Licensing/LicenseManager.h"
 
 //==============================================================================
 // VocalEss — a de-esser / dynamic sibilance controller.
@@ -49,6 +50,10 @@ public:
     std::atomic<float> outLDb    { -100.0f };
     std::atomic<float> outRDb    { -100.0f };
 
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalEss" };
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void updateSidechainFilter (int type, float freq);
@@ -70,9 +75,6 @@ private:
     int   lastScType = -1;
     float lastScFreq = -1.0f;
     float lastCrossoverFreq = -1.0f;
-
-    // Output is muted until this plugin is activated (audio-thread-safe read).
-    licensing::ProductLicense license { "VOCALESS" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalEssProcessor)
 };

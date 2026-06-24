@@ -1,9 +1,10 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/Reverb.h"
+
+#include "../../common/Licensing/LicenseManager.h"
 
 //==============================================================================
 // VocalVerb — an algorithmic Dattorro-style plate / hall reverb tuned for
@@ -42,6 +43,10 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalVerb" };
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void applyProgram (int index);
@@ -49,9 +54,6 @@ private:
 
     Reverb engine;
     int currentProgram = 0;
-
-    // Output is muted until this plugin is activated (audio-thread-safe read).
-    licensing::ProductLicense license { "VOCALVERB" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalVerbProcessor)
 };

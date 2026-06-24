@@ -1,9 +1,10 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "licensing/LicenseManager.h"
 #include <juce_dsp/juce_dsp.h>
 #include "dsp/DelayEngine.h"
+
+#include "../../common/Licensing/LicenseManager.h"
 
 //==============================================================================
 // VocalDelay — a tempo-syncable stereo delay for vocals. Sync to host, an
@@ -47,6 +48,10 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     DelayEngine engine;
 
+    // License engine (hard lock — DSP is bypassed until activated). The editor
+    // reads this to show/hide its activation overlay.
+    LicenseManager license { "VocalDelay" };
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void applyProgram (int index);
@@ -56,9 +61,6 @@ private:
 
     std::atomic<float> displayBpm { 120.0f };
     std::atomic<float> displayMs  { 350.0f };
-
-    // Output is muted until this plugin is activated (audio-thread-safe read).
-    licensing::ProductLicense license { "VOCALDELAY" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalDelayProcessor)
 };
