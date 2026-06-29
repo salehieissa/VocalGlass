@@ -59,6 +59,8 @@ private:
     std::atomic<float>* hiFreqPtr    = nullptr;
     std::atomic<float>* mixPtr       = nullptr;
     std::atomic<float>* trimPtr      = nullptr;
+    std::atomic<float>* attackPtr    = nullptr;
+    std::atomic<float>* releasePtr   = nullptr;
 
     int currentProgram = 0;
 

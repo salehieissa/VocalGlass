@@ -82,24 +82,29 @@ Vocal2AEditor::Vocal2AEditor (Vocal2AProcessor& p)
 
     setupCap (hiFreqLabel, "hi freq", 15.0f, false);
     hiFreqLabel.setJustificationType (juce::Justification::centredLeft);
+    setupCap (attackLabel,  "attack", 15.0f, false);
+    setupCap (releaseLabel, "release", 15.0f, false);
     setupCap (mixLabel, "mix", 15.0f, false);
     setupCap (trimLabel, "trim", 15.0f, false);
 
     setupCap (hiFreqCap, "flat", 12.0f, false);
+    setupCap (attackCap,  "10 ms", 12.0f, false);
+    setupCap (releaseCap, "1.2 s", 12.0f, false);
     setupCap (mixCap, "100%", 12.0f, false);
     setupCap (trimCap, "0.0 dB", 12.0f, false);
-    hiFreqCap.setColour (juce::Label::textColourId, theme::inkSoft);
-    mixCap.setColour (juce::Label::textColourId, theme::inkSoft);
-    trimCap.setColour (juce::Label::textColourId, theme::inkSoft);
+    for (auto* c : { &hiFreqCap, &attackCap, &releaseCap, &mixCap, &trimCap })
+        c->setColour (juce::Label::textColourId, theme::inkSoft);
 
-    for (auto* k : { &hiFreqKnob, &mixKnob, &trimKnob })
+    for (auto* k : { &hiFreqKnob, &attackKnob, &releaseKnob, &mixKnob, &trimKnob })
     {
         k->setBigValueVisible (false);
         addAndMakeVisible (*k);
     }
-    hiFreqAtt = std::make_unique<SliderAtt> (proc.apvts, "hiFreq", hiFreqKnob);
-    mixAtt    = std::make_unique<SliderAtt> (proc.apvts, "mix", mixKnob);
-    trimAtt   = std::make_unique<SliderAtt> (proc.apvts, "trim", trimKnob);
+    hiFreqAtt  = std::make_unique<SliderAtt> (proc.apvts, "hiFreq", hiFreqKnob);
+    attackAtt  = std::make_unique<SliderAtt> (proc.apvts, "attack", attackKnob);
+    releaseAtt = std::make_unique<SliderAtt> (proc.apvts, "release", releaseKnob);
+    mixAtt     = std::make_unique<SliderAtt> (proc.apvts, "mix", mixKnob);
+    trimAtt    = std::make_unique<SliderAtt> (proc.apvts, "trim", trimKnob);
 
     startTimerHz (30);
     setSize (1024, 650);
@@ -140,6 +145,16 @@ void Vocal2AEditor::timerCallback()
     hiFreqCap.setText (hiFreq <= 1.0f ? "flat"
                        : hiFreq >= 99.0f ? "bright"
                        : juce::String (juce::roundToInt (hiFreq)), juce::dontSendNotification);
+
+    const float attack = proc.apvts.getRawParameterValue ("attack")->load();
+    attackCap.setText (juce::String (attack, attack < 10.0f ? 1 : 0) + " ms",
+                       juce::dontSendNotification);
+
+    const float release = proc.apvts.getRawParameterValue ("release")->load();
+    releaseCap.setText (release >= 1000.0f
+                            ? juce::String (release / 1000.0f, 2) + " s"
+                            : juce::String (juce::roundToInt (release)) + " ms",
+                        juce::dontSendNotification);
 
     const float mix = proc.apvts.getRawParameterValue ("mix")->load();
     mixCap.setText (juce::String (juce::roundToInt (mix)) + "%", juce::dontSendNotification);
@@ -329,5 +344,18 @@ void Vocal2AEditor::resized()
         mixKnob.setBounds (trimKnob.getX() - 110, strip.getCentreY() - 30, kSize, kSize);
         mixLabel.setBounds (mixKnob.getX() - 10, strip.getCentreY() - 48, kSize + 20, 20);
         mixCap.setBounds (mixKnob.getX() - 10, mixKnob.getBottom() - 2, kSize + 20, 18);
+    }
+
+    // attack + release small knobs centred in the open middle of the strip
+    {
+        const int kSize = 60;
+        const int gapCx = (hiFreqKnob.getRight() + mixKnob.getX()) / 2;
+        attackKnob.setBounds (gapCx - kSize - 24, strip.getCentreY() - 30, kSize, kSize);
+        attackLabel.setBounds (attackKnob.getX() - 10, strip.getCentreY() - 48, kSize + 20, 20);
+        attackCap.setBounds (attackKnob.getX() - 10, attackKnob.getBottom() - 2, kSize + 20, 18);
+
+        releaseKnob.setBounds (gapCx + 24, strip.getCentreY() - 30, kSize, kSize);
+        releaseLabel.setBounds (releaseKnob.getX() - 10, strip.getCentreY() - 48, kSize + 20, 20);
+        releaseCap.setBounds (releaseKnob.getX() - 10, releaseKnob.getBottom() - 2, kSize + 20, 18);
     }
 }

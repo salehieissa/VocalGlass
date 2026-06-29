@@ -38,7 +38,6 @@ public:
     {
         writePos = 0; phase = 0.0; stepIndex = 0; gateGain = 1.0f;
         replaying = false; replayPos = 0; replayLeft = 0; grainLen = 1;
-        rngState = 0x2545F4914F6CDD1Dull;
         computeStep();
     }
 
@@ -100,15 +99,6 @@ public:
     }
 
 private:
-    std::uint64_t nextRand() noexcept
-    {
-        rngState ^= rngState << 13;
-        rngState ^= rngState >> 7;
-        rngState ^= rngState << 17;
-        return rngState;
-    }
-    float rand01() noexcept { return (float) (nextRand() & 0xFFFFu) / 65535.0f; }
-
     float grainEnv (int gi) const noexcept
     {
         const int fade = juce::jmin (grainLen / 4, (int) (0.003 * sr) + 1);
@@ -131,27 +121,27 @@ private:
 
     void computeStep() noexcept
     {
-        currentOn = pattern[(size_t) (stepIndex % 16)] != 0;
+        const int s = stepIndex % 16;
+        currentOn = pattern[(size_t) s] != 0;
         rollDiv = 0;
 
-        // glitch events get denser as depth rises; none below ~0.25 so the
-        // gate stays clean/musical at low settings.
-        if (depthAmt > 0.25f && rand01() < depthAmt * 0.35f)
+        // Deterministic, on-grid glitch placement so the gate is fully timed and
+        // repeatable (same input -> same chop, locked to the beat). Density rises
+        // with "depth": none below ~0.25 so the gate stays clean/musical, then a
+        // 2x stutter roll, a faster 4x roll when pushed, and a single beat-repeat
+        // freeze near the top of the bar at high depth.
+        if (depthAmt > 0.25f && (s == 6 || s == 14))
+            rollDiv = 2;
+        if (depthAmt > 0.55f && (s == 7 || s == 15))
+            rollDiv = 4;
+
+        if (depthAmt > 0.70f && s == 10 && ! replaying)
         {
-            const float r2 = rand01();
-            if (r2 < 0.5f)
-            {
-                rollDiv = (nextRand() & 1u) ? 4 : 2;          // stutter roll
-            }
-            else if (! replaying)
-            {
-                grainLen = juce::jlimit (64, ringLen - 1,
-                                         (int) (stepLen * (r2 < 0.75f ? 0.5 : 1.0)));
-                captureGrain (grainLen);                      // beat repeat
-                replaying  = true;
-                replayPos  = 0;
-                replayLeft = (int) stepLen;
-            }
+            grainLen   = juce::jlimit (64, ringLen - 1, (int) (stepLen * 0.5));
+            captureGrain (grainLen);                          // beat repeat
+            replaying  = true;
+            replayPos  = 0;
+            replayLeft = (int) stepLen;
         }
     }
 
@@ -168,8 +158,6 @@ private:
 
     bool replaying = false;
     int replayPos = 0, replayLeft = 0, grainLen = 1;
-
-    std::uint64_t rngState = 0x2545F4914F6CDD1Dull;
 
     // A groovy 16-step gate pattern (1 = open, 0 = ducked).
     static constexpr int pattern[16] = { 1,1,0,1, 1,0,1,0, 1,1,0,1, 1,0,1,1 };

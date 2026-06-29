@@ -45,8 +45,13 @@ public:
         inAp[2].prepare (scaleLen (379, scale, 1.0f));
         inAp[3].prepare (scaleLen (277, scale, 1.0f));
 
-        // Tank: lengths get scaled at run time by "size" (0.5..2.0) + modulation.
-        const float headroom = 2.4f;
+        // Tank: the *buffers* are padded with headroom so the run-time "size" scale
+        // (up to ~1.9 * lengthMul) plus modulation always fit. The *musical* tap
+        // lengths and the RT60 loop-time use the nominal length (ref * scale) only.
+        // Previously the padded buffer length (ref * scale * headroom) was reused as
+        // the tap/loop length, which inflated the loop time ~2.4x, crushed the
+        // feedback gain and made the Decay knob barely audible.
+        const float headroom = 3.0f;
         tankApA.prepare (scaleLen (672,  scale, headroom));
         tankDelA.prepare (scaleLen (4453, scale, headroom));
         tankAp2A.prepare (scaleLen (1800, scale, headroom));
@@ -56,6 +61,12 @@ public:
         tankDelB.prepare (scaleLen (4217, scale, headroom));
         tankAp2B.prepare (scaleLen (2656, scale, headroom));
         tankDel2B.prepare (scaleLen (3163, scale, headroom));
+
+        // Nominal (musical) lengths = reference * sample-rate scale, no headroom.
+        nomApA  = 672.0f  * scale;  nomDelA  = 4453.0f * scale;
+        nomAp2A = 1800.0f * scale;  nomDel2A = 3720.0f * scale;
+        nomApB  = 908.0f  * scale;  nomDelB  = 4217.0f * scale;
+        nomAp2B = 2656.0f * scale;  nomDel2B = 3163.0f * scale;
 
         baseScale = scale;
         reset();
@@ -117,8 +128,8 @@ public:
         const float sizeScale = juce::jmap (p.size, 0.0f, 1.0f, 0.55f, 1.9f) * mt.lengthMul;
 
         // tank loop time (s) ~ sum of the long delays of one half, used for RT60.
-        const float loopSamples = ((float) tankDelA.base + (float) tankDel2A.base
-                                    + (float) tankDelB.base + (float) tankDel2B.base)
+        // Uses the nominal (un-padded) lengths so Decay maps correctly to RT60.
+        const float loopSamples = (nomDelA + nomDel2A + nomDelB + nomDel2B)
                                    * 0.5f * sizeScale;
         const float loopSec = juce::jmax (1.0e-4f, loopSamples / (float) sr);
         const float rt60 = juce::jlimit (0.1f, 20.0f, p.decaySec);
@@ -162,15 +173,15 @@ public:
         const float modAmtA = p.modDepth * 12.0f * baseScale;
         const float modAmtB = p.modDepth * 9.0f  * baseScale;
 
-        // tank delay lengths (scaled by size)
-        const float lenApA  = (float) tankApA.base  * sizeScale;
-        const float lenDelA = (float) tankDelA.base * sizeScale;
-        const float lenAp2A = (float) tankAp2A.base * sizeScale;
-        const float lenDel2A= (float) tankDel2A.base* sizeScale;
-        const float lenApB  = (float) tankApB.base  * sizeScale;
-        const float lenDelB = (float) tankDelB.base * sizeScale;
-        const float lenAp2B = (float) tankAp2B.base * sizeScale;
-        const float lenDel2B= (float) tankDel2B.base* sizeScale;
+        // tank delay lengths (nominal length scaled by size; never the padded buffer)
+        const float lenApA  = nomApA  * sizeScale;
+        const float lenDelA = nomDelA * sizeScale;
+        const float lenAp2A = nomAp2A * sizeScale;
+        const float lenDel2A= nomDel2A* sizeScale;
+        const float lenApB  = nomApB  * sizeScale;
+        const float lenDelB = nomDelB * sizeScale;
+        const float lenAp2B = nomAp2B * sizeScale;
+        const float lenDel2B= nomDel2B* sizeScale;
 
         const float mix = juce::jlimit (0.0f, 1.0f, p.mix);
         const float wetGain = std::sqrt (mix);
@@ -429,6 +440,10 @@ private:
     //==========================================================================
     double sr = 44100.0;
     float baseScale = 1.0f;
+
+    // Nominal (musical) tank lengths in samples = reference * sample-rate scale.
+    float nomApA = 1.0f, nomDelA = 1.0f, nomAp2A = 1.0f, nomDel2A = 1.0f;
+    float nomApB = 1.0f, nomDelB = 1.0f, nomAp2B = 1.0f, nomDel2B = 1.0f;
 
     Delay   predelay;
     Allpass inAp[4];

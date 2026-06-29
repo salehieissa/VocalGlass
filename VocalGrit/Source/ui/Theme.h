@@ -71,11 +71,15 @@ namespace theme
     inline juce::Font font (float size, bool bold = false)
     {
        #if VG_HAS_BUNDLED_FONT
+        // Bundled faces are SF Pro Display Medium (body) + Semibold (bold), so the
+        // whole UI reads a touch heavier and renders identically on Windows + macOS.
         return juce::Font (juce::FontOptions().withTypeface (bundledTypeface (bold))
                                               .withHeight (size));
        #else
-        return juce::Font (juce::FontOptions (fontFamily, size,
-                                              bold ? juce::Font::bold : juce::Font::plain));
+        // No bundled font: ask the system for the named weights — Medium for body
+        // text, Semibold where "bold" was requested.
+        return juce::Font (juce::FontOptions().withName (fontFamily).withHeight (size)
+                               .withStyle (bold ? "Semibold" : "Medium"));
        #endif
     }
 

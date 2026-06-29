@@ -55,8 +55,18 @@ public:
     //==========================================================================
     void setParams (float gain0to100, float peakReduction0to100, int mode,
                     bool autoMakeupOn, int analogMode, float hiFreq0to100,
-                    float mix0to100, float trimDb)
+                    float mix0to100, float trimDb,
+                    float attackMs, float releaseMs)
     {
+        // Attack / release from the panel knobs. The opto cell keeps its
+        // program-dependent two-stage release: "releaseMs" sets the long tail and
+        // a faster initial stage (~15%) handles the first part of the recovery,
+        // blended by how deep the current reduction is (see process()).
+        const double fs = sampleRate > 0.0 ? sampleRate : 44100.0;
+        attackCoeff  = std::exp (-1.0 / (juce::jmax (0.1f,  attackMs)         * 0.001 * fs));
+        relSlowCoeff = std::exp (-1.0 / (juce::jmax (20.0f, releaseMs)        * 0.001 * fs));
+        relFastCoeff = std::exp (-1.0 / (juce::jmax (5.0f,  releaseMs * 0.15f) * 0.001 * fs));
+
         // gain knob = manual makeup / drive (dB). 50 -> ~+6 dB.
         manualMakeupLin = (float) juce::Decibels::decibelsToGain (
             juce::jmap (gain0to100, 0.0f, 100.0f, -12.0f, 24.0f));

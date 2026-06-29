@@ -465,7 +465,7 @@ void VocalGritEditor::resized()
             auto top = inner.removeFromTop (24);
             delayOn.setBounds (top.removeFromRight (62));
             top.removeFromRight (8);
-            delaySyncBtn.setBounds (top.removeFromRight (58));
+            delaySyncBtn.setBounds (top.removeFromRight (66));
             inner.removeFromTop (6);
             const int kw = inner.getWidth() / 3;
             auto timeCell = inner.removeFromLeft (kw);

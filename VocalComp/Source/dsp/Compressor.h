@@ -67,12 +67,16 @@ public:
         if (n == 0 || nc == 0) return;
 
         // --- mode-dependent character ---
+        // The attack/release knobs stay the dominant control of the timing — mode
+        // only nudges it slightly. The real voicing difference lives in the knee
+        // width and the peak/RMS detector blend, not in a big hidden multiply on
+        // the user's time values (which made the knobs feel like they did nothing).
         float atkScale = 1.0f, relScale = 1.0f, kneeDb = 6.0f, rmsBlend = 0.25f;
         switch (mode)
         {
-            case Arc:  atkScale = 1.0f; relScale = 1.0f; kneeDb = 6.0f;  rmsBlend = 0.20f; break;
-            case Opto: atkScale = 2.2f; relScale = 3.0f; kneeDb = 12.0f; rmsBlend = 0.75f; break;
-            case Warm: atkScale = 1.3f; relScale = 1.4f; kneeDb = 14.0f; rmsBlend = 0.50f; break;
+            case Arc:  atkScale = 1.0f;  relScale = 1.0f;  kneeDb = 6.0f;  rmsBlend = 0.20f; break;
+            case Opto: atkScale = 1.4f;  relScale = 1.6f;  kneeDb = 12.0f; rmsBlend = 0.75f; break;
+            case Warm: atkScale = 1.15f; relScale = 1.25f; kneeDb = 14.0f; rmsBlend = 0.50f; break;
             default: break;
         }
 

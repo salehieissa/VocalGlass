@@ -20,6 +20,11 @@ public:
         setRotaryParameters (kStart, kEnd, true);
     }
 
+    // When set, the lit ring fills in reverse: the minimum value draws a FULL arc
+    // (ending on the right) and the maximum draws empty. Used for "retune speed"
+    // where 0 = hardest/fastest should read as a full ring on the right.
+    void setInvertedFill (bool shouldInvert) { invertFill = shouldInvert; repaint(); }
+
     void paint (juce::Graphics& g) override
     {
         auto bounds = getLocalBounds().toFloat().reduced (5.0f);
@@ -27,7 +32,8 @@ public:
         const auto  c = bounds.getCentre();
 
         const double range = getMaximum() - getMinimum();
-        const float prop = range > 0.0 ? (float) ((getValue() - getMinimum()) / range) : 0.0f;
+        float prop = range > 0.0 ? (float) ((getValue() - getMinimum()) / range) : 0.0f;
+        if (invertFill) prop = 1.0f - prop;
         const float angle = kStart + prop * (kEnd - kStart);
         const bool hover = isMouseOverOrDragging (true);
 
@@ -106,4 +112,5 @@ private:
 
     float thickness;
     bool  drawTicks;
+    bool  invertFill = false;
 };

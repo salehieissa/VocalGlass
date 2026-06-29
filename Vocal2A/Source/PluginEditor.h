@@ -55,13 +55,16 @@ private:
     juce::Label analogLabel;
     std::array<Bouncy<juce::TextButton>, 3> analogButtons; // 50Hz / 60Hz / off
 
-    juce::Label  hiFreqLabel, mixLabel, trimLabel;
-    juce::Label  hiFreqCap, mixCap, trimCap;
-    VintageKnob  hiFreqKnob { VintageKnob::Style::Small };
-    VintageKnob  mixKnob    { VintageKnob::Style::Small };
-    VintageKnob  trimKnob   { VintageKnob::Style::Small };
+    juce::Label  hiFreqLabel, mixLabel, trimLabel, attackLabel, releaseLabel;
+    juce::Label  hiFreqCap, mixCap, trimCap, attackCap, releaseCap;
+    VintageKnob  hiFreqKnob  { VintageKnob::Style::Small };
+    VintageKnob  mixKnob     { VintageKnob::Style::Small };
+    VintageKnob  trimKnob    { VintageKnob::Style::Small };
+    VintageKnob  attackKnob  { VintageKnob::Style::Small };
+    VintageKnob  releaseKnob { VintageKnob::Style::Small };
 
     std::unique_ptr<SliderAtt> gainAtt, peakAtt, hiFreqAtt, mixAtt, trimAtt;
+    std::unique_ptr<SliderAtt> attackAtt, releaseAtt;
     std::unique_ptr<ButtonAtt> autoAtt;
 
     // layout rects

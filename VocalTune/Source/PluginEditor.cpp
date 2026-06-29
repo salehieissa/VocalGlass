@@ -110,6 +110,9 @@ VocalTuneEditor::VocalTuneEditor (VocalTuneProcessor& p)
     setCap (flexLabel,     "flex tune");
 
     configureKnob (retuneKnob,   "retuneSpeed", retuneAtt);
+    // Retune speed: 0 = hardest/fastest. Show that as a FULL ring on the right
+    // and empty it as the value rises toward a looser, more natural glide.
+    retuneKnob.setInvertedFill (true);
     configureKnob (humanizeKnob, "humanize",    humanizeAtt);
     configureKnob (flexKnob,     "flexTune",    flexAtt);
     addAndMakeVisible (retuneKnob);

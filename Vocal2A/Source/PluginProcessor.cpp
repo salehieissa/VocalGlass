@@ -16,6 +16,8 @@ Vocal2AProcessor::Vocal2AProcessor()
     hiFreqPtr = apvts.getRawParameterValue ("hiFreq");
     mixPtr    = apvts.getRawParameterValue ("mix");
     trimPtr   = apvts.getRawParameterValue ("trim");
+    attackPtr  = apvts.getRawParameterValue ("attack");
+    releasePtr = apvts.getRawParameterValue ("release");
 
     // Load any cached activation and validate online in the background.
     license.loadCachedAndValidate();
@@ -38,6 +40,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout Vocal2AProcessor::createPara
     layout.add (std::make_unique<AudioParameterChoice> (
         ParameterID { "mode", 1 }, "Mode",
         StringArray { "Compress", "Limit" }, OptoLeveler::Compress));
+
+    // Opto attack / release. The cell stays program-dependent; these set the
+    // overall speed of the optical attack and the long release tail.
+    layout.add (std::make_unique<AudioParameterFloat> (
+        ParameterID { "attack", 1 }, "Attack",
+        NormalisableRange<float> (0.1f, 120.0f, 0.1f, 0.4f), 10.0f));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        ParameterID { "release", 1 }, "Release",
+        NormalisableRange<float> (80.0f, 3000.0f, 1.0f, 0.4f), 1200.0f));
 
     layout.add (std::make_unique<AudioParameterBool> (
         ParameterID { "autoMakeup", 1 }, "Auto Makeup", true));
@@ -94,7 +106,8 @@ void Vocal2AProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
 
     engine.setParams (gainPtr->load(), peakPtr->load(), (int) modePtr->load(),
                       autoPtr->load() > 0.5f, (int) analogPtr->load(),
-                      hiFreqPtr->load(), mixPtr->load(), trimPtr->load());
+                      hiFreqPtr->load(), mixPtr->load(), trimPtr->load(),
+                      attackPtr->load(), releasePtr->load());
     engine.process (buffer);
 }
 
