@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Theme.h"
+#include "../../../common/ui/Skin.h"
 
 //==============================================================================
 // The big circular "GRIT" hero dial: a large dark glossy disc with a glowing
@@ -21,6 +22,24 @@ public:
     }
 
     void setCaption (const juce::String& c) { caption = c; }
+
+    // Plate mode: the baked chassis carries the ring seat, so the dial paints
+    // the rotating blank-face steel dome sprite with the live GRIT text drawn
+    // on top in code (the text never rotates). Sweep is 6-to-6.
+    void setPlateMode (bool p)
+    {
+        plateMode = p;
+        if (plateMode)
+        {
+            // dome measured in the full-canvas sprite: centre (0.1999, 0.3533),
+            // dia 0.199 of the canvas width
+            knobImg = skin::cropToDome (skin::image ("grit-knob-large@2x.png"),
+                                        0.1999f, 0.3533f, 0.199f);
+            setRotaryParameters (juce::MathConstants<float>::pi,
+                                 juce::MathConstants<float>::pi * 3.0f, true);
+            stopTimer();
+        }
+    }
 
     // Soft white domed face (matches the small knobs' look at hero scale).
     static void paintDome (juce::Graphics& g, juce::Rectangle<float> disc)
@@ -55,6 +74,19 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        if (plateMode)
+        {
+            // bare steel dome, no text — the value reads from the neon ring
+            if (knobImg.isValid())
+            {
+                const double range = getMaximum() - getMinimum();
+                const float prop = range > 0.0 ? (float) ((getValue() - getMinimum()) / range) : 0.0f;
+                const float angle = juce::MathConstants<float>::pi * (1.0f + 2.0f * prop);
+                skin::drawKnobRotated (g, knobImg, getLocalBounds().toFloat(), angle);
+            }
+            return;
+        }
+
         auto bounds = getLocalBounds().toFloat().reduced (26.0f);
         const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f;
         const auto c = bounds.getCentre();
@@ -144,4 +176,6 @@ private:
 
     juce::String caption;
     float phase = 0.0f;
+    bool plateMode = false;
+    juce::Image knobImg;
 };

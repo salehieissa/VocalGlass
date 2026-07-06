@@ -16,8 +16,14 @@ public:
 
     void setActiveTint (bool on) { tinted = on; repaint(); }
 
+    // Plate mode: the button circle + icon are baked into the chassis; lit
+    // states are masked from the ON plate by the editor.
+    bool plate = false;
+
     void paintButton (juce::Graphics& g, bool highlighted, bool) override
     {
+        if (plate) return;
+
         auto b = getLocalBounds().toFloat().reduced (2.0f);
         const float d = juce::jmin (b.getWidth(), b.getHeight());
         auto circle = juce::Rectangle<float> (b.getCentreX() - d * 0.5f,

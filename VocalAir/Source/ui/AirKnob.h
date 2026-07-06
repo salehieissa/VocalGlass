@@ -3,6 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Theme.h"
 #include "Icons.h"
+#include "../../../common/ui/Skin.h"
 
 //==============================================================================
 // A large soft white neumorphic dome knob: top-lit domed face, a glowing pink
@@ -20,6 +21,21 @@ public:
     }
 
     void setCaption (const juce::String& c) { caption = c; }
+
+    // Plate mode: the baked chassis carries the ring groove and glow, so the
+    // knob paints only the rotating brushed-steel dome sprite — no text.
+    // Sweep is 6-to-6, once around.
+    void setPlateMode (bool p)
+    {
+        plateMode = p;
+        if (plateMode)
+        {
+            knobImg = skin::cropToDome (skin::image ("grit-knob-large@2x.png"),
+                                        0.1999f, 0.3533f, 0.199f);
+            setRotaryParameters (juce::MathConstants<float>::pi,
+                                 juce::MathConstants<float>::pi * 3.0f, true);
+        }
+    }
 
     // Soft white domed face lit from the top — the core of the look. Shared by
     // the mini knob so both read as the same material at any scale.
@@ -55,6 +71,18 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        if (plateMode)
+        {
+            if (knobImg.isValid())
+            {
+                const double range = getMaximum() - getMinimum();
+                const float prop = range > 0.0 ? (float) ((getValue() - getMinimum()) / range) : 0.0f;
+                const float angle = juce::MathConstants<float>::pi * (1.0f + 2.0f * prop);
+                skin::drawKnobRotated (g, knobImg, getLocalBounds().toFloat(), angle);
+            }
+            return;
+        }
+
         auto bounds = getLocalBounds().toFloat().reduced (10.0f);
         const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f;
         const auto  c = bounds.getCentre();
@@ -129,6 +157,8 @@ private:
     static constexpr float kEnd   = juce::MathConstants<float>::pi * 2.75f;
 
     juce::String caption;
+    bool plateMode = false;
+    juce::Image knobImg;
 };
 
 //==============================================================================
@@ -145,8 +175,32 @@ public:
         setRotaryParameters (kStart, kEnd, true);
     }
 
+    void setPlateMode (bool p)
+    {
+        plateMode = p;
+        if (plateMode)
+        {
+            knobImg = skin::cropToDome (skin::image ("grit-knob-small@2x.png"),
+                                        0.4993f, 0.4648f, 0.615f);
+            setRotaryParameters (juce::MathConstants<float>::pi,
+                                 juce::MathConstants<float>::pi * 3.0f, true);
+        }
+    }
+
     void paint (juce::Graphics& g) override
     {
+        if (plateMode)
+        {
+            if (knobImg.isValid())
+            {
+                const double range = getMaximum() - getMinimum();
+                const float prop = range > 0.0 ? (float) ((getValue() - getMinimum()) / range) : 0.0f;
+                const float angle = juce::MathConstants<float>::pi * (1.0f + 2.0f * prop);
+                skin::drawKnobRotated (g, knobImg, getLocalBounds().toFloat(), angle);
+            }
+            return;
+        }
+
         auto bounds = getLocalBounds().toFloat().reduced (4.0f);
         const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f;
         const auto  c = bounds.getCentre();
@@ -201,4 +255,7 @@ public:
 private:
     static constexpr float kStart = juce::MathConstants<float>::pi * 1.25f;
     static constexpr float kEnd   = juce::MathConstants<float>::pi * 2.75f;
+
+    bool plateMode = false;
+    juce::Image knobImg;
 };

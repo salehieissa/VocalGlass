@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Theme.h"
+#include "../../../common/ui/Skin.h"
 
 //==============================================================================
 // Soft white neumorphic dome knob with a glowing pink value ring (matches the
@@ -25,8 +26,30 @@ public:
     // where 0 = hardest/fastest should read as a full ring on the right.
     void setInvertedFill (bool shouldInvert) { invertFill = shouldInvert; repaint(); }
 
+    // Plate mode: seat + neon ring live on the baked chassis (the editor draws
+    // the value wedge) — the component paints only the rotating dome sprite,
+    // with a full-360 sweep starting and ending at 6 o'clock.
+    void setPlateSprite (juce::Image dome)
+    {
+        sprite = dome;
+        setRotaryParameters (juce::MathConstants<float>::pi,
+                             juce::MathConstants<float>::pi * 3.0f, true);
+        repaint();
+    }
+
     void paint (juce::Graphics& g) override
     {
+        if (sprite.isValid())
+        {
+            const double range = getMaximum() - getMinimum();
+            const float prop = range > 0.0 ? (float) ((getValue() - getMinimum()) / range) : 0.0f;
+            const auto rp = getRotaryParameters();
+            const float angle = rp.startAngleRadians
+                                + prop * (rp.endAngleRadians - rp.startAngleRadians);
+            skin::drawKnobRotated (g, sprite, getLocalBounds().toFloat(), angle);
+            return;
+        }
+
         auto bounds = getLocalBounds().toFloat().reduced (5.0f);
         const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f - 2.0f;
         const auto  c = bounds.getCentre();
@@ -113,4 +136,5 @@ private:
     float thickness;
     bool  drawTicks;
     bool  invertFill = false;
+    juce::Image sprite;
 };

@@ -6,6 +6,7 @@
 #include "ui/Meters.h"
 #include "ui/Controls.h"
 #include "ui/Bounce.h"
+#include "../../common/ui/Skin.h"
 #include "../../common/Licensing/ActivationOverlay.h"
 
 using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -56,6 +57,14 @@ private:
     std::array<juce::Rectangle<int>, 4> leftCards;
     juce::Rectangle<int> centerCard, rightCard;
     juce::Rectangle<int> threshScaleArea, attenScaleArea, outScaleArea;
+
+    // ---- baked photoreal plate ----
+    juce::Image chassisImg, chassisOnImg;
+
+    juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const;
+    void maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect);
+    void maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<int> screenRect, int featherPx);
+    void paintPlate (juce::Graphics& g);
 
     // Full-editor "enter your license key" overlay (shown until activated).
     ActivationOverlay licenseOverlay { proc.license, "VocalEss", "https://vocalessential.com",

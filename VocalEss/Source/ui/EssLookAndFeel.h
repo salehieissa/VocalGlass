@@ -2,18 +2,27 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Theme.h"
+#include "../../../common/ui/Skin.h"
 
 //==============================================================================
 // Premium light look: soft white neumorphic dome knobs with a glowing accent
 // value ring, recessed slider grooves with dimensional white-dome thumbs, and
 // clean white pill toggles that fill with the accent gradient when active.
 // Shared family styling with VocalGrit.
+//
+// Plate mode (baked chassis present): linear sliders paint only the steel stud
+// thumb (track + fill live on the plates); components tagged "hit" become
+// invisible hit areas.
 //==============================================================================
 class EssLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    bool plate = false;
+
     EssLookAndFeel()
     {
+        thumbImg = skin::cropToDome (skin::image ("slider-thumb@2x.png"),
+                                     0.4994f, 0.4989f, 0.626f);
        #if VG_HAS_BUNDLED_FONT
         setDefaultSansSerifTypeface (theme::bundledTypeface (false));
        #else
@@ -51,6 +60,18 @@ public:
                            juce::Slider::SliderStyle style, juce::Slider&) override
     {
         const bool horizontal = (style == juce::Slider::LinearHorizontal);
+
+        if (plate && thumbImg.isValid())
+        {
+            // stud thumb only — the recessed groove is baked into the plate and
+            // the pink fill is masked from the ON plate by the editor
+            const float dia = (float) (horizontal ? height : width);
+            const float cx = horizontal ? sliderPos : (float) x + (float) width * 0.5f;
+            const float cy = horizontal ? (float) y + (float) height * 0.5f : sliderPos;
+            skin::drawInRect (g, thumbImg, { cx - dia * 0.5f, cy - dia * 0.5f, dia, dia });
+            return;
+        }
+
         const float trackThick = horizontal ? 14.0f : 16.0f;
         const float thumbR     = horizontal ? 11.0f : 13.0f;
 
@@ -178,6 +199,7 @@ public:
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& b,
                            bool highlighted, bool /*down*/) override
     {
+        if (plate && b.getComponentID() == "hit") return;   // plate carries the visuals
         auto r = b.getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
         const bool on = b.getToggleState();
@@ -195,12 +217,22 @@ public:
     void drawButtonBackground (juce::Graphics& g, juce::Button& b,
                                const juce::Colour&, bool highlighted, bool /*down*/) override
     {
+        if (plate && b.getComponentID() == "hit") return;   // invisible hit area
         auto r = b.getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
         paintPill (g, r, radius, b.getToggleState(), highlighted);
     }
 
+    void drawButtonText (juce::Graphics& g, juce::TextButton& b,
+                         bool highlighted, bool down) override
+    {
+        if (plate && b.getComponentID() == "hit") return;   // text is baked
+        LookAndFeel_V4::drawButtonText (g, b, highlighted, down);
+    }
+
 private:
+    juce::Image thumbImg;
+
     //==========================================================================
     static void paintAccentFill (juce::Graphics& g, juce::Rectangle<float> r, float radius)
     {

@@ -14,8 +14,12 @@ class TapButton : public Bouncy<juce::Button>
 public:
     TapButton() : Bouncy<juce::Button> ("TAP") {}
 
+    bool plate = false;   // baked into the chassis; editor masks the lit state
+
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override
     {
+        if (plate) return;
+
         auto r = getLocalBounds().toFloat().reduced (2.0f);
 
         // clean white card: subtle top-down sheen + crisp hairline, no shadow

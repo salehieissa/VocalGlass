@@ -148,6 +148,7 @@ namespace
             { "Vintage Glue",    55.0f, 64.0f, OptoLeveler::Compress, true,  OptoLeveler::Hum60,     20.0f, 100.0f,  1.0f },
             { "Heavy Level",     58.0f, 90.0f, OptoLeveler::Compress, true,  OptoLeveler::AnalogOff, 12.0f, 100.0f,  1.5f },
             { "Parallel",        56.0f, 88.0f, OptoLeveler::Compress, true,  OptoLeveler::AnalogOff,  6.0f,  55.0f,  1.0f },
+            { "Signature",       50.0f, 60.0f, OptoLeveler::Compress, false, OptoLeveler::AnalogOff,  0.0f, 100.0f,  0.0f },
         };
         return presets;
     }

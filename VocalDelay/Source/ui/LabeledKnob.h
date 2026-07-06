@@ -33,8 +33,25 @@ public:
 
     void setValueText (const juce::String& t) { value.setText (t, juce::dontSendNotification); }
 
+    // Plate mode: captions and value texts are handled by the editor (captions
+    // are baked into the chassis, values drawn in paintPlate); the component's
+    // bounds become the dome square and the slider fills them entirely.
+    void setPlate (bool p)
+    {
+        plate = p;
+        name.setVisible (! p);
+        value.setVisible (! p);
+        resized();
+    }
+
     void resized() override
     {
+        if (plate)
+        {
+            slider.setBounds (getLocalBounds());
+            return;
+        }
+
         auto r = getLocalBounds();
         const int nameH  = isLarge ? 26 : 18;
         const int valueH = isLarge ? 22 : 17;
@@ -50,6 +67,7 @@ public:
 
 private:
     bool isLarge = false;
+    bool plate = false;
     static constexpr float kStart = juce::MathConstants<float>::pi * 1.25f;
     static constexpr float kEnd   = juce::MathConstants<float>::pi * 2.75f;
 };

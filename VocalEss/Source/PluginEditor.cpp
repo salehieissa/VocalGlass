@@ -2,6 +2,41 @@
 #include "ui/Theme.h"
 
 //==============================================================================
+// Baked-plate geometry. The chassis PNGs are 2048x1360 and the plate fills the
+// whole canvas; x/w are fractions of the image width, y/h of its height.
+// Measured from the plates (ON-vs-OFF diff components, pink-core scans on the
+// ON plate, groove scans on the OFF plate).
+namespace plategeo
+{
+    // THRESHOLD slider groove (fill runs thumb -> bottom)
+    constexpr float slCx = 0.3420f, slHalfW = 0.0105f;
+    constexpr float slY0 = 0.1544f, slY1 = 0.8331f;
+
+    // meter channels (thresh sidechain, atten, out L/R) — shared travel span
+    constexpr float scCx = 0.3943f, attenCx = 0.5594f;
+    constexpr float outLCx = 0.7515f, outRCx = 0.8860f;
+    constexpr float mY0 = 0.1550f, mY1 = 0.8350f;
+    constexpr float mHalfW = 0.0095f;
+
+    // pills (mask rects from diff bounds)
+    constexpr float splitRect[4]  = { 0.1050f, 0.1375f, 0.1343f, 0.0618f };
+    constexpr float audioRect[4]  = { 0.0918f, 0.7176f, 0.1582f, 0.0603f };
+    constexpr float schainRect[4] = { 0.0913f, 0.7882f, 0.1582f, 0.0618f };
+
+    // sidechain filter button: icon box + full hit span (icon + chevron)
+    constexpr float scIconRect[4] = { 0.0947f, 0.5110f, 0.0967f, 0.0875f };
+    constexpr float scHitX1 = 0.2339f;
+
+    // frequency capsule
+    constexpr float freqRect[4] = { 0.0942f, 0.3125f, 0.1519f, 0.0590f };
+
+    // readout capsule label rows (inside the baked capsules)
+    constexpr float readY0 = 0.8560f, readY1 = 0.8920f;
+    constexpr float scValCx = 0.4173f, attenValCx = 0.5931f;
+    constexpr float outLValCx = 0.7737f, outRValCx = 0.8738f;
+}
+
+//==============================================================================
 juce::RangedAudioParameter& VocalEssEditor::param (VocalEssProcessor& p, const char* id)
 {
     return *p.apvts.getParameter (id);
@@ -14,6 +49,11 @@ VocalEssEditor::VocalEssEditor (VocalEssProcessor& p)
       scBtn   (param (p, "scType"))
 {
     setLookAndFeel (&lnf);
+
+    chassisImg   = skin::image ("ess-chassis@2x.png");
+    chassisOnImg = skin::image ("ess-chassis-on@2x.png");
+    const bool baked = chassisImg.isValid() && chassisOnImg.isValid();
+    lnf.plate = baked;
 
     // Split toggle
     splitBtn.setClickingTogglesState (true);
@@ -60,8 +100,36 @@ VocalEssEditor::VocalEssEditor (VocalEssProcessor& p)
     // Added last so the floating readout sits on top of the meter bars.
     addAndMakeVisible (threshBubble);
 
+    // ------------------------------------------------------------------
+    // Baked plate: cards, captions, scales, grooves and capsules live on the
+    // chassis images. Pills become invisible hit areas, the slider paints a
+    // steel stud thumb, meters are masked from the ON plate, and readouts
+    // render into the baked capsules.
+    if (baked)
+    {
+        for (auto* b : { &splitBtn, &monAudio, &monSChain })
+            b->setComponentID ("hit");
+
+        freqBox.setPlateMode (true);
+
+        // glass tone inside the lit icon box (covers the baked hp curve so the
+        // live filter curve can be drawn) — sampled at the least-bloomed spot
+        scBtn.setPlateMode (true, juce::Colour (chassisOnImg.getPixelAt (347, 775)));
+
+        for (auto* m : { &scBar, &attenBar, &outLBar, &outRBar })
+            m->setVisible (false);
+
+        for (auto* v : { &scValue, &attenValue, &outLValue, &outRValue })
+        {
+            v->setColour (juce::Label::textColourId, theme::ink);
+            v->setFont (theme::font (13.0f, true));
+        }
+
+        threshBubble.setFontHeight (16.0f);
+    }
+
     startTimerHz (30);
-    setSize (680, 500);
+    setSize (baked ? 800 : 680, baked ? 531 : 500);
 
     // License overlay sits on top of everything; it shows itself until activated.
     addChildComponent (licenseOverlay);
@@ -85,7 +153,10 @@ void VocalEssEditor::updateBubble()
     const auto b = thresholdSlider.getBounds();
     const double prop = thresholdSlider.valueToProportionOfLength (thresholdSlider.getValue());
     const int y = b.getBottom() - (int) std::round (prop * b.getHeight());
-    threshBubble.setBounds (b.getCentreX() + 4, y - 11, 50, 22);
+    if (chassisImg.isValid())
+        threshBubble.setBounds (b.getCentreX() + 6, y - 14, 60, 27);
+    else
+        threshBubble.setBounds (b.getCentreX() + 4, y - 11, 50, 22);
     threshBubble.toFront (false);
 }
 
@@ -118,11 +189,122 @@ void VocalEssEditor::timerCallback()
     freqBox.refresh();
     scBtn.refresh();
     updateBubble();
+
+    if (chassisImg.isValid())
+        repaint();   // meter fills + lit pills live in paintPlate
+}
+
+//==============================================================================
+juce::Rectangle<int> VocalEssEditor::plateFracRect (float fx, float fy, float fw, float fh) const
+{
+    return juce::Rectangle<float> (fx * (float) getWidth(),  fy * (float) getHeight(),
+                                   fw * (float) getWidth(),  fh * (float) getHeight())
+               .toNearestInt();
+}
+
+// Blit the matching region of the lit plate over the base plate — pixel
+// registration is guaranteed because both images share the same canvas.
+void VocalEssEditor::maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect)
+{
+    const float iw = (float) chassisOnImg.getWidth(), ih = (float) chassisOnImg.getHeight();
+    g.drawImage (chassisOnImg,
+                 screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight(),
+                 juce::roundToInt (((float) screenRect.getX()      / (float) getWidth())  * iw),
+                 juce::roundToInt (((float) screenRect.getY()      / (float) getHeight()) * ih),
+                 juce::roundToInt (((float) screenRect.getWidth()  / (float) getWidth())  * iw),
+                 juce::roundToInt (((float) screenRect.getHeight() / (float) getHeight()) * ih));
+}
+
+// Same reveal but with a soft alpha ramp along the rect border, so the slight
+// global tone drift between the two plates never shows as a hard rectangle.
+void VocalEssEditor::maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<int> screenRect,
+                                          int featherPx)
+{
+    constexpr int n = 4;
+    const float s = (float) featherPx / (float) n;
+    const auto r = screenRect.toFloat();
+
+    g.saveState();
+    g.reduceClipRegion (r.reduced ((float) featherPx).toNearestInt());
+    maskFromOn (g, screenRect);
+    g.restoreState();
+
+    for (int j = 0; j < n; ++j)     // j = 0 is the outermost, faintest band
+    {
+        juce::Path band;
+        band.addRectangle (r.reduced (s * (float) j));
+        band.addRectangle (r.reduced (s * (float) (j + 1)));
+        band.setUsingNonZeroWinding (false);
+        g.saveState();
+        g.reduceClipRegion (band);
+        g.setOpacity (((float) j + 0.5f) / (float) n);
+        maskFromOn (g, screenRect);
+        g.restoreState();
+    }
+}
+
+void VocalEssEditor::paintPlate (juce::Graphics& g)
+{
+    using namespace plategeo;
+
+    g.drawImage (chassisImg, getLocalBounds().toFloat(),
+                 juce::RectanglePlacement::stretchToFit);
+
+    const int fpx = juce::roundToInt ((float) getWidth() * 0.010f);
+
+    // ---- lit pills
+    if (splitBtn.getToggleState())
+        maskFromOnFeathered (g, plateFracRect (splitRect[0], splitRect[1],
+                                               splitRect[2], splitRect[3]), fpx);
+
+    const int mon = (int) proc.apvts.getRawParameterValue ("monitor")->load();
+    if (mon == 0)
+        maskFromOnFeathered (g, plateFracRect (audioRect[0], audioRect[1],
+                                               audioRect[2], audioRect[3]), fpx);
+    else
+        maskFromOnFeathered (g, plateFracRect (schainRect[0], schainRect[1],
+                                               schainRect[2], schainRect[3]), fpx);
+
+    // ---- sidechain filter button is always lit (pink outline + bloom)
+    maskFromOnFeathered (g, plateFracRect (scIconRect[0], scIconRect[1],
+                                           scIconRect[2], scIconRect[3]), fpx);
+
+    // ---- THRESHOLD slider fill: thumb -> bottom of the groove
+    {
+        const float pr = juce::jlimit (0.0f, 1.0f,
+                                       (float) thresholdSlider.valueToProportionOfLength (
+                                           thresholdSlider.getValue()));
+        const float yTop = slY1 - pr * (slY1 - slY0);
+        if (slY1 - yTop > 0.002f)
+            maskFromOn (g, plateFracRect (slCx - slHalfW, yTop,
+                                          slHalfW * 2.0f, slY1 - yTop));
+    }
+
+    // ---- meter fills (atten fills downward from the top, the rest rise)
+    auto meterUp = [&] (float cx, float t)
+    {
+        if (t <= 0.004f) return;
+        const float yTop = mY1 - t * (mY1 - mY0);
+        maskFromOn (g, plateFracRect (cx - mHalfW, yTop, mHalfW * 2.0f, mY1 - yTop));
+    };
+    meterUp (scCx,   scBar.getT());
+    meterUp (outLCx, outLBar.getT());
+    meterUp (outRCx, outRBar.getT());
+
+    if (attenBar.getT() > 0.004f)
+        maskFromOn (g, plateFracRect (attenCx - mHalfW, mY0,
+                                      mHalfW * 2.0f, attenBar.getT() * (mY1 - mY0)));
 }
 
 //==============================================================================
 void VocalEssEditor::paint (juce::Graphics& g)
 {
+    if (chassisImg.isValid())
+    {
+        paintPlate (g);
+        return;
+    }
+
     theme::backdrop (g, getLocalBounds());
 
     auto card = [&] (juce::Rectangle<int> r, float radius = 14.0f)
@@ -204,6 +386,45 @@ void VocalEssEditor::paint (juce::Graphics& g)
 void VocalEssEditor::resized()
 {
     licenseOverlay.setBounds (getLocalBounds());
+
+    if (chassisImg.isValid())
+    {
+        using namespace plategeo;
+        const float W = (float) getWidth();
+        const float H = (float) getHeight();
+
+        // pills + freq + sidechain: hit areas over the baked art
+        splitBtn.setBounds  (plateFracRect (splitRect[0],  splitRect[1],  splitRect[2],  splitRect[3]));
+        monAudio.setBounds  (plateFracRect (audioRect[0],  audioRect[1],  audioRect[2],  audioRect[3]));
+        monSChain.setBounds (plateFracRect (schainRect[0], schainRect[1], schainRect[2], schainRect[3]));
+        freqBox.setBounds   (plateFracRect (freqRect[0], freqRect[1], freqRect[2], freqRect[3]));
+        scBtn.setBounds     (plateFracRect (scIconRect[0], scIconRect[1],
+                                            scHitX1 - scIconRect[0], scIconRect[3]));
+
+        // threshold slider: bounds sized so the JUCE thumb travel (inset by
+        // the fixed 12px V4 thumb radius) matches the baked groove exactly.
+        // Width (= drawn thumb dia) scales with the window.
+        const int tr = 12;
+        const int sw = juce::roundToInt (0.0273f * W);
+        thresholdSlider.setBounds (juce::roundToInt (slCx * W) - sw / 2,
+                                   juce::roundToInt (slY0 * H) - tr,
+                                   sw, juce::roundToInt ((slY1 - slY0) * H) + tr * 2);
+
+        // readouts inside the baked capsules
+        scValue.setBounds    (plateFracRect (scValCx    - 0.032f, readY0, 0.064f, readY1 - readY0));
+        attenValue.setBounds (plateFracRect (attenValCx - 0.032f, readY0, 0.064f, readY1 - readY0));
+        outLValue.setBounds  (plateFracRect (outLValCx  - 0.032f, readY0, 0.064f, readY1 - readY0));
+        outRValue.setBounds  (plateFracRect (outRValCx  - 0.032f, readY0, 0.064f, readY1 - readY0));
+
+        // hidden meters keep bounds so nothing depends on stale rects
+        scBar.setBounds    (plateFracRect (scCx - mHalfW,    mY0, mHalfW * 2.0f, mY1 - mY0));
+        attenBar.setBounds (plateFracRect (attenCx - mHalfW, mY0, mHalfW * 2.0f, mY1 - mY0));
+        outLBar.setBounds  (plateFracRect (outLCx - mHalfW,  mY0, mHalfW * 2.0f, mY1 - mY0));
+        outRBar.setBounds  (plateFracRect (outRCx - mHalfW,  mY0, mHalfW * 2.0f, mY1 - mY0));
+
+        updateBubble();
+        return;
+    }
 
     auto content = getLocalBounds().reduced (14);
 

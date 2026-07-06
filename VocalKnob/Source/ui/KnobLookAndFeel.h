@@ -11,6 +11,10 @@
 class KnobLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    // Plate mode (baked chassis present): components tagged "hit" become
+    // invisible hit areas — the plate carries their visuals.
+    bool plate = false;
+
     KnobLookAndFeel()
     {
        #if VG_HAS_BUNDLED_FONT
@@ -167,24 +171,80 @@ public:
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& b,
                            bool highlighted, bool /*down*/) override
     {
-        auto r = b.getLocalBounds().toFloat().reduced (1.5f);
+        auto r = pillRect (b.getLocalBounds().toFloat());
         const float radius = r.getHeight() * 0.5f;
         const bool on = b.getToggleState();
 
         paintPill (g, r, radius, on, highlighted);
-
-        g.setColour (on ? juce::Colours::white : theme::ink);
-        g.setFont (theme::font (13.0f, false));
-        g.drawText (b.getButtonText(), r, juce::Justification::centred);
+        drawPillText (g, b.getButtonText(), r, on);
     }
 
     //==========================================================================
     void drawButtonBackground (juce::Graphics& g, juce::Button& b,
-                               const juce::Colour&, bool highlighted, bool /*down*/) override
+                               const juce::Colour&, bool highlighted, bool down) override
     {
-        auto r = b.getLocalBounds().toFloat().reduced (1.5f);
+        const auto id = b.getComponentID();
+        if (plate && id == "hit") return;   // plate carries the visuals
+        if (id == "navL" || id == "navR")
+        {
+            drawNavButton (g, b.getLocalBounds().toFloat(), id == "navL", highlighted, down);
+            return;
+        }
+
+        auto r = pillRect (b.getLocalBounds().toFloat());
         const float radius = r.getHeight() * 0.5f;
         paintPill (g, r, radius, b.getToggleState(), highlighted);
+    }
+
+    // Centre the pill label in the *visible* pill (not the full button bounds,
+    // which include the bottom shadow gap) so the text reads dead-centre.
+    void drawButtonText (juce::Graphics& g, juce::TextButton& b,
+                         bool /*highlighted*/, bool /*down*/) override
+    {
+        const auto id = b.getComponentID();
+        if (plate && id == "hit") return;
+        if (id == "navL" || id == "navR")
+            return; // chevron is painted in the background
+
+        drawPillText (g, b.getButtonText(), pillRect (b.getLocalBounds().toFloat()),
+                      b.getToggleState());
+    }
+
+    static void drawPillText (juce::Graphics& g, const juce::String& text,
+                              juce::Rectangle<float> pill, bool on)
+    {
+        g.setColour (on ? juce::Colours::white : theme::ink);
+        g.setFont (theme::font (14.5f, false));
+        g.drawText (text, pill, juce::Justification::centred);
+    }
+
+    // Soft circular nav button with a real chevron glyph (replaces the raw "<"/">").
+    static void drawNavButton (juce::Graphics& g, juce::Rectangle<float> b,
+                               bool left, bool hover, bool down)
+    {
+        const float d = juce::jmin (b.getWidth(), b.getHeight()) - 4.0f;
+        auto disc = juce::Rectangle<float> (d, d).withCentre (b.getCentre());
+
+        {
+            juce::Path p; p.addEllipse (disc);
+            juce::DropShadow (juce::Colour (0xff20242e).withAlpha (0.10f), 5, { 0, 1 }).drawForPath (g, p);
+        }
+        juce::ColourGradient cg (juce::Colours::white, disc.getX(), disc.getY(),
+                                 juce::Colour (0xfff2f3f7), disc.getX(), disc.getBottom(), false);
+        g.setGradientFill (cg);
+        g.fillEllipse (disc);
+        g.setColour (juce::Colour (0xffe9eaef));
+        g.drawEllipse (disc, 1.0f);
+
+        const auto c = disc.getCentre();
+        const float s = disc.getWidth() * 0.16f;
+        juce::Path ch;
+        if (left) { ch.startNewSubPath (c.x + s * 0.55f, c.y - s); ch.lineTo (c.x - s * 0.55f, c.y); ch.lineTo (c.x + s * 0.55f, c.y + s); }
+        else      { ch.startNewSubPath (c.x - s * 0.55f, c.y - s); ch.lineTo (c.x + s * 0.55f, c.y); ch.lineTo (c.x - s * 0.55f, c.y + s); }
+        g.setColour (hover ? theme::accent : theme::inkSoft);
+        g.strokePath (ch, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved,
+                                                juce::PathStrokeType::rounded));
+        juce::ignoreUnused (down);
     }
 
 private:
@@ -206,31 +266,52 @@ private:
         g.drawLine (r.getX() + radius, r.getY() + 0.7f, r.getRight() - radius, r.getY() + 0.7f, 1.0f);
     }
 
+    // Inset the visible pill within the button bounds, leaving headroom at the
+    // bottom for a soft drop shadow so the pills read as puffy floating caps.
+    static juce::Rectangle<float> pillRect (juce::Rectangle<float> full)
+    {
+        return full.reduced (3.0f).withTrimmedBottom (6.0f);
+    }
+
     static void paintPill (juce::Graphics& g, juce::Rectangle<float> r, float radius,
                            bool on, bool highlighted)
     {
+        // Two-layer cool shadow (wide ambient + tight contact) so the pill floats
+        // convincingly instead of sitting on a flat grey smear. The active pill
+        // also gets a gentle pink halo. No hard outline.
+        {
+            juce::Path pp; pp.addRoundedRectangle (r, radius);
+            const juce::Colour sh (0xff20242e);
+            juce::DropShadow (sh.withAlpha (on ? 0.14f : 0.08f), 18, { 0, 6 }).drawForPath (g, pp);
+            juce::DropShadow (sh.withAlpha (on ? 0.10f : 0.06f), 5,  { 0, 1 }).drawForPath (g, pp);
+            if (on)
+                theme::glowPath (g, pp, 0.28f, 16);
+        }
+
         if (on)
         {
             juce::ColourGradient ag (theme::accentHi, r.getX(), r.getY(),
                                      theme::accentLo, r.getX(), r.getBottom(), false);
             g.setGradientFill (ag);
             g.fillRoundedRectangle (r, radius);
-            g.setColour (juce::Colours::white.withAlpha (0.30f));
-            g.drawLine (r.getX() + radius, r.getY() + 1.2f, r.getRight() - radius, r.getY() + 1.2f, 1.2f);
-            g.setColour (theme::accentLo.withAlpha (0.55f));
-            g.drawRoundedRectangle (r, radius, 1.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.28f));
+            g.drawLine (r.getX() + radius, r.getY() + 1.4f, r.getRight() - radius, r.getY() + 1.4f, 1.2f);
         }
         else
         {
-            // clean white pill: subtle top-down sheen + crisp hairline, no shadow
+            // clean white pill: a whisper of top-down sheen, a bright top hairline,
+            // and (only on hover) a faint accent ring. Otherwise borderless.
             juce::ColourGradient wg (juce::Colours::white, r.getX(), r.getY(),
-                                     juce::Colour (0xfff4f5f8), r.getX(), r.getBottom(), false);
+                                     juce::Colour (0xfff5f6f9), r.getX(), r.getBottom(), false);
             g.setGradientFill (wg);
             g.fillRoundedRectangle (r, radius);
             g.setColour (juce::Colours::white);
             g.drawLine (r.getX() + radius, r.getY() + 1.0f, r.getRight() - radius, r.getY() + 1.0f, 1.0f);
-            g.setColour (highlighted ? theme::accent.withAlpha (0.55f) : theme::cardLine);
-            g.drawRoundedRectangle (r, radius, 1.2f);
+            if (highlighted)
+            {
+                g.setColour (theme::accent.withAlpha (0.45f));
+                g.drawRoundedRectangle (r, radius, 1.2f);
+            }
         }
     }
 

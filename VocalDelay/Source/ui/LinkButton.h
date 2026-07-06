@@ -12,8 +12,12 @@ class LinkButton : public Bouncy<juce::Button>
 public:
     LinkButton() : Bouncy<juce::Button> ("LINK") { setClickingTogglesState (true); }
 
+    bool plate = false;   // baked into the chassis; editor masks the lit state
+
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override
     {
+        if (plate) return;
+
         auto r = getLocalBounds().toFloat().reduced (2.0f);
         const float d = juce::jmin (r.getWidth(), r.getHeight());
         auto circle = juce::Rectangle<float> (d, d).withCentre (r.getCentre());

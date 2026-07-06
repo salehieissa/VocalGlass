@@ -718,6 +718,12 @@ namespace
                 {"glitchOn",1}, {"glitchRate",0.2f}, {"glitchDepth",0.8f}, {"glitchMix",1.0f},
                 {"delayOn",1}, {"delayTime",300}, {"delayFeedback",0.3f}, {"delayMix",0.2f},
                 {"output",-0.5f} } },
+
+            // Saturn-style gentle warm saturation — low drive, tape-like Warm
+            // mode, parallel blend, every extra module off (defaults).
+            { "Signature",
+              { {"drive",6}, {"mode",1}, {"bias",0.15f}, {"tone",9000}, {"lowcut",90},
+                {"mix",0.35f}, {"output",0.0f} } },
         };
         return presets;
     }

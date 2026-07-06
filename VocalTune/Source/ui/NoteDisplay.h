@@ -22,15 +22,21 @@ public:
         }
     }
 
+    // Plate mode: the dark smoked-glass face + gridlines are baked into the
+    // chassis; only the glowing note readout is drawn here.
+    bool plate = false;
+
     void paint (juce::Graphics& g) override
     {
         auto b = getLocalBounds().toFloat();
         const float corner = 14.0f;
 
         // recessed display face
-        theme::recess (g, b, corner);
+        if (! plate)
+            theme::recess (g, b, corner);
 
         // faint reference grid (clipped to the rounded face)
+        if (! plate)
         {
             juce::Path clip; clip.addRoundedRectangle (b, corner);
             g.saveState();
@@ -51,7 +57,8 @@ public:
 
         if (! hasNote || ! juce::isPositiveAndBelow (note, 12))
         {
-            g.setColour (theme::inkSoft.withAlpha (0.45f));
+            g.setColour (plate ? juce::Colours::white.withAlpha (0.30f)
+                               : theme::inkSoft.withAlpha (0.45f));
             g.setFont (theme::font (face.getHeight() * 0.62f, true));
             g.drawText (juce::CharPointer_UTF8 ("\xe2\x80\x93"), face, juce::Justification::centred);
             return;

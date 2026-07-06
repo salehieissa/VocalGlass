@@ -56,6 +56,10 @@ namespace licensing
             { "VocalVerb",    "cc3d4350-7448-4295-8a84-8d4605115046"    },
             { "VocalDoubler", "858ac599-6e69-4a1b-b25e-bc9ba486b5b6" },
             { "VocalDelay",   "eaa60ffe-d141-42d9-8949-1e351704cd7e"   },
+            { "VocalGate",    "7250a37e-d98d-45ab-b794-61d5f2898a1c" },
+            { "VocalMod",     "5f7fb530-ea61-4001-9bd6-5339d2c2b515" },
+            { "VocalBlend",   "3cf141d1-e3e2-432b-8ae1-c5c77509acfc" },
+            { "VocalChop",    "57f02040-993f-4b79-924a-d064ea199b7b" },
         };
         auto it = map.find (pluginName);
         return it != map.end() ? it->second : juce::String();

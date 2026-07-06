@@ -10,6 +10,7 @@
 #include "ui/ArcMeter.h"
 #include "ui/AirKnob.h"
 #include "../../common/Licensing/ActivationOverlay.h"
+#include "../../common/ui/Skin.h"
 
 //==============================================================================
 class VocalAirEditor : public juce::AudioProcessorEditor,
@@ -49,6 +50,8 @@ private:
     // knobs
     AirKnob midKnob, highKnob;
     juce::Label midLo, midHi, highLo, highHi;
+    juce::Label midVal, highVal;    // plate mode: live values under the rings
+    juce::Label trimVal;            // plate mode: live dB readout under trim
     IconButton linkBtn;
 
     // bottom controls
@@ -67,6 +70,18 @@ private:
 
     // layout rectangles
     juce::Rectangle<int> displayCard;
+
+    // Baked photoreal plate pair (air-chassis / air-chassis-on). The OFF plate
+    // is drawn full-bleed; lit states are masked from the ON plate.
+    juce::Image chassisImg, chassisOnImg;
+
+    juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const;
+    void maskFromOn (juce::Graphics&, juce::Rectangle<int> screenRect);
+    void maskFromOnFeathered (juce::Graphics&, juce::Rectangle<int> screenRect, int featherPx);
+    void drawRingWedge (juce::Graphics&, juce::Slider&, float cxFrac, float cyFrac,
+                        float domeRFrac, float solidRFrac, float maxRFrac);
+    void drawMeterArc (juce::Graphics&);
+    void paintPlate (juce::Graphics&);
 
     // Full-editor "enter your license key" overlay (shown until activated).
     ActivationOverlay licenseOverlay { proc.license, "VocalAir", "https://vocalessential.com",

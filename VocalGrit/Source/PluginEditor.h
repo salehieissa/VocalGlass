@@ -114,6 +114,22 @@ private:
     std::array<juce::Rectangle<int>, 4> fxAreas;
     float pulsePhase = 0.0f;
 
+    // ---- baked photoreal plate (grit-chassis pair) ----
+    juce::Image chassisImg, chassisOnImg;
+    juce::Label inDbLbl, outDbLbl;               // live dB readouts beside the meter bars
+    float inSm = 0.0f, outSm = 0.0f;             // meter smoothing for the plate bars
+
+    // A knob whose neon ring lives on the plate: slider + measured geometry
+    // (fractions of the canvas; wedgeR = reveal radius incl. glow bleed).
+    struct PlateKnob { juce::Slider* s; float cx, cy, wedgeR, domeR; };
+    std::vector<PlateKnob> plateKnobs;
+
+    juce::Point<float>   plateXY (float fx, float fy) const;
+    juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const;
+    void maskFromOn (juce::Graphics&, juce::Rectangle<int> screenRect);
+    void drawPlateHalo (juce::Graphics&, const PlateKnob&);
+    void paintPlate (juce::Graphics&);
+
     // Full-editor "enter your license key" overlay (shown until activated).
     ActivationOverlay licenseOverlay { proc.license, "VocalGrit", "https://vocalessential.com",
                                        [] (float h, bool b) { return theme::font (h, b); } };

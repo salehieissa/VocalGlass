@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Theme.h"
+#include "../../../common/ui/Skin.h"
 
 //==============================================================================
 // Premium light look: soft white neumorphic dome rotaries with a glowing accent
@@ -206,12 +207,33 @@ public:
     void drawButtonBackground (juce::Graphics& g, juce::Button& b,
                                const juce::Colour&, bool highlighted, bool /*down*/) override
     {
+        // When the baked chassis carries the selector buttons (silver in the
+        // base plate, lit pink in the on-plate), the button component is just an
+        // invisible hit area — the editor masks the lit state from the on-plate.
+        const auto cid = b.getComponentID();
+        if ((cid == "flat" || cid == "seg") && skin::has ("2a-chassis@2x.png"))
+            return;
+
         auto r = b.getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
+
+        // Photoreal segmented pill: dark/pale seg-off, glowing pink seg-on. The
+        // art is a horizontal pill centred in a square with transparent margins,
+        // so scale to width and centre vertically (overflow is clipped).
+        if (segOff.isValid() && segOn.isValid())
+        {
+            skin::drawTrimmedInRect (g, b.getToggleState() ? "seg-on@2x.png"
+                                                           : "seg-off@2x.png", r);
+            return;
+        }
+
         paintPill (g, r, radius, b.getToggleState(), highlighted);
     }
 
 private:
+    juce::Image segOff { skin::image ("seg-off@2x.png") };
+    juce::Image segOn  { skin::image ("seg-on@2x.png") };
+
     //==========================================================================
     static void paintAccentFill (juce::Graphics& g, juce::Rectangle<float> r, float radius)
     {

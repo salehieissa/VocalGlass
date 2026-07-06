@@ -13,6 +13,10 @@
 class TuneLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    // Plate mode: dropdown capsules (incl. chevrons) are baked into the
+    // chassis — combo boxes only place their value text over the cavity.
+    bool plate = false;
+
     TuneLookAndFeel()
     {
        #if VG_HAS_BUNDLED_FONT
@@ -54,6 +58,8 @@ public:
     void drawComboBox (juce::Graphics& g, int width, int height, bool,
                        int, int, int, int, juce::ComboBox& box) override
     {
+        if (plate) return;
+
         auto r = juce::Rectangle<float> (0, 0, (float) width, (float) height).reduced (1.0f);
         const float radius = 9.0f;
 

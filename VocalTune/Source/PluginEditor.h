@@ -12,6 +12,8 @@
 #include "ui/ToggleSwitch.h"
 #include "ui/SegmentedControl.h"
 #include "ui/IconButton.h"
+#include "ui/PlateKeyboard.h"
+#include "../../common/ui/Skin.h"
 #include "../../common/Licensing/ActivationOverlay.h"
 #include <array>
 #include <memory>
@@ -37,6 +39,16 @@ private:
     void showPresetMenu();
     void configureKnob (RingKnob&, const juce::String& paramId, std::unique_ptr<SliderAtt>&);
     void configureBox (juce::Label&, const juce::String& paramId);
+
+    // ---- baked-plate rendering ----
+    void setupPlateMode();
+    void paintPlate (juce::Graphics&);
+    void layoutPlate();
+    juce::Rectangle<int> plateFracRect (float fx0, float fy0, float fx1, float fy1) const;
+    void maskFromOn (juce::Graphics&, juce::Rectangle<int> screenRect);
+    void maskFromOnFeathered (juce::Graphics&, juce::Rectangle<int> screenRect, int featherPx);
+    void drawRingWedge (juce::Graphics&, juce::Slider&, float cxFrac, float cyFrac,
+                        float domeRFrac, float solidRFrac, float maxRFrac, bool inverted);
 
     VocalTuneProcessor& proc;
     TuneLookAndFeel laf;
@@ -89,6 +101,13 @@ private:
     juce::Rectangle<int> leftCard, rightCard, iconCard, presetPill;
     juce::Rectangle<int> retuneBoxR, humanizeBoxR, flexBoxR;
     int editLineY = 0, detuneDividerY = 0;
+
+    // baked-plate skin
+    juce::Image chassisImg, chassisOnImg;
+    bool plateBaked = false;
+    PlateKeyboard keyboard;
+    float liveCents = 0.0f;
+    bool  livePitch = false;
 
     // Full-editor "enter your license key" overlay (shown until activated).
     ActivationOverlay licenseOverlay { proc.license, "VocalTune", "https://vocalessential.com",

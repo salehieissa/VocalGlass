@@ -57,6 +57,28 @@ target_link_libraries(VocalComp
         juce::juce_recommended_warning_flags
 )
 
+# --- optional photoreal skin (assets/ui) ---
+set(VG_SKIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets/ui")
+set(VG_SKIN_CANDIDATES
+    "comp-chassis@2x.png" "comp-chassis-on@2x.png"
+    "grit-knob-small@2x.png" "slider-thumb@2x.png")
+set(VG_SKIN_SOURCES "")
+foreach(name ${VG_SKIN_CANDIDATES})
+    if(EXISTS "${VG_SKIN_DIR}/${name}")
+        list(APPEND VG_SKIN_SOURCES "${VG_SKIN_DIR}/${name}")
+    endif()
+endforeach()
+if(VG_SKIN_SOURCES)
+    juce_add_binary_data(VocalCompSkin
+        NAMESPACE   SkinBinary
+        HEADER_NAME SkinBinary.h
+        SOURCES     ${VG_SKIN_SOURCES})
+    target_link_libraries(VocalComp PRIVATE VocalCompSkin)
+    target_compile_definitions(VocalComp PUBLIC VG_HAS_SKIN=1)
+else()
+    target_compile_definitions(VocalComp PUBLIC VG_HAS_SKIN=0)
+endif()
+
 # --- optional bundled UI font (drop SFProDisplay.ttf into <repo>/fonts/) ---
 set(VG_FONTS_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/../fonts")
 set(VG_FONT_REG   "${VG_FONTS_DIR}/SFProDisplay.ttf")

@@ -1,0 +1,73 @@
+---
+description: Baked-chassis photoreal UI pipeline for all VocalGlass plugins (Vocal2A is the reference implementation)
+alwaysApply: true
+---
+
+# Photoreal VST Skin Pipeline (glass · chrome · neon)
+
+Vocal2A is the reference implementation. When skinning any plugin, clone its approach exactly. Reference render lives in `assets/ui/_refs/<id>-reference.png`.
+
+## Chassis prompt template (proven — follow this structure exactly)
+Every chassis edit prompt has five parts, in this order:
+1. **Registration guard** — "Edit the attached image, keeping the framing, size, plate, lighting and all static caption text pixel-identical."
+2. **Replace, don't just remove** — controls are swapped for their lit footprint ("remove the dial, replace it with a complete thick neon ring exactly where the dial's outer edge was") so positional information survives into the next generation.
+3. **Explicit enumeration** — name every control and every pill label individually (clean, warm, dirty, blown…); never say "all the buttons".
+4. **Dynamic-text removal list** — enumerate every live value to strip (preset name, slider numbers, readouts), and say what to KEEP (the pill, the arrows, every static caption).
+5. **Off-state rule** — every control body must stay readable at value 0, so the OFF plate keeps an UNLIT version of it: knob rings become matte silver-grey recessed ring grooves (same position/diameter/thickness as the lit ring), slider tracks become empty recessed grooves, meters keep dark segments, pills go silver. Only the spots covered by sprites flatten to clean glass: where domes and thumbs sat (no holes, no seats there).
+
+Generation order is ON plate first (from the approved reference, while control positions are still visible), then OFF as an edit of the ON (strip all pink, pills to silver, meters dark). Registration chains: reference → ON → OFF.
+
+## Sprite design language (the owner's taste — never regress on these)
+- **Domes are bare steel** — never draw text, numbers, percentages, or captions over a knob sprite. Live readouts belong elsewhere on the plate or nowhere.
+- **Design for display size.** A sprite shown at ~30px gets exaggerated proportions: wide pronounced bezel (~15% of radius), bold pointer (~8% of diameter, running from bezel to halfway in), simple calm shading. Fine detail is reserved for large sprites (~150px+).
+- **Pointers are unmissable**: a wide recessed slot filled with solid bright white paint, high contrast — never a faint engraved hairline.
+- **Reflections are calm**: soft radial sheen, evenly lit; NO mirror-like environment reflections, no busy chrome distortion.
+- **Rotation-safe by construction**: top-down orthographic, zero perspective, perfectly symmetric lighting, and only perfectly centered shadows (an offset shadow orbits when the sprite rotates).
+- **Sprites carry their own grounding** (centered soft shadow) because the plate under them is flat.
+
+## Asset generation order (NEVER deviate)
+1. **Screenshot the ORIGINAL vibecoded plugin** (the real running UI, not any generated image).
+2. **Send it to GPT to revamp** into the glass·chrome·neon aesthetic (describe the 2A look in words: frosted white-glass plate, chrome edge, screws, hot-pink neon, SF Pro Display; the screenshot is for LAYOUT ONLY). Iterate until approved → save as `assets/ui/_refs/<id>-reference.png`.
+3. **Pull the chassis pair, ON first** (see the prompt template above):
+   - `<id>-chassis-on@2x.png` — i2i EDIT of the approved reference: controls replaced by their lit footprints (rings where knobs were, filled bars where sliders were), every pill/meter/title lit, dynamic text removed, flat glass elsewhere.
+   - `<id>-chassis@2x.png` — i2i EDIT of the ON plate: strip every pink/lit element to flat glass, pills to silver/off, meters dark. No holes, no seats, no grooves.
+4. **Pull every remaining sprite from the same reference** (i2i extractions so material + lighting match): knobs, thumbs, needles. One asset per generation, transparent background, top-down orthographic, symmetric lighting, centered shadow only.
+
+## Asset set (per plugin, in `assets/ui/`, embedded via CMake `VG_SKIN_CANDIDATES`)
+- `<id>-chassis@2x.png` — OFF plate. Everything static baked in: plate, chrome edge, screws, all SF Pro Display text, meter face (no needle), silver/off buttons, empty ring seats (no domes), BLANK toggle/LED spots. No dynamic numbers.
+- `<id>-chassis-on@2x.png` — generated as an image-to-image EDIT of the OFF plate (pixel-registered), every button + lit element on.
+- `knob-large@2x.png` / `knob-small@2x.png` — rotating dome sprites (shared by all plugins). MUST be perfect top-down orthographic (zero perspective, symmetric lighting, NO shadow) so full-sprite rotation doesn't tumble.
+- `halo-ring@2x.png` — shared neon glow ring sprite; code scales + arc-clips it per knob (replaces revealing baked halos from the ON plate).
+- `bat-off@2x.png` / `bat-on@2x.png` — toggle lever sprites (shared).
+- `<id>-…-needle@2x.png` — meter needle sprite if the plugin has a meter.
+
+## Measure, never eyeball (Python + PIL/numpy on the plate images)
+1. Opaque bbox of the plate inside the image → `OX0/OY0/OX1/OY1` constants; all layout is fractions of this region.
+2. **Diff ON vs OFF plate** (`abs(on-off).sum(axis=2) > 60`). Connected components give:
+   - exact button pill bounds + the seam valleys between pills (mask rects run seam-to-seam),
+   - halo circle centres + radii (these are the knob centres — nothing else is).
+   - When windowing a single control, bound the ROI by neighbour midpoints or the glow bleeds in and biases the centre.
+3. Measure sprite pivots: dome centre via hard-alpha bbox (AI art is never centred); bat base centre via widest-column band (≈ (0.502, 0.497), base dia 0.24 of canvas).
+4. Knob seat radii from the OFF plate: radial luminance minimum = seat groove; the dome should reach it.
+5. Text rows for toggle/LED alignment: threshold luminance < ~120 in the label band.
+6. Circle centres (ring grooves, halos): fit per-angle median radii of the HOT saturated core only (r-g > 140) with least-squares, excluding other lit regions (pills!) from the mask — a plain mean of glow pixels is biased by asymmetric bloom.
+7. Live label centering: JUCE renders a label's cap-height core below the rect centre. Verify by measuring the dark text pixels in a screenshot and nudge the rect until the text core sits on the target line — don't trust the rect itself.
+
+## Rendering rules (shared design system)
+Reusable pieces live in `common/ui/` — use them, don't re-implement per plugin:
+- `skin::image / cropToDome / drawKnobRotated` (Skin.h) — sprite loading, dome-hugging crops, pivot-correct rotation.
+- Plate masking/halos/meters: `maskFromOn`-style blits of the SAME fractional region from the ON plate.
+
+Rules:
+- Draw OFF plate as base; reveal lit states by blitting the same region from the ON plate.
+- **Never expand button mask rects** — the ON plate has ALL pills lit; overshoot reveals the neighbour's lit edge.
+- Knob glows come from `halo-ring@2x.png` scaled per knob and arc-clipped to the value with a feathered leading edge — never a hard radial cut.
+- Knob sweep: full 360°, starts AND ends at 6 o'clock (`kStart = π`, `kEnd = 3π`). At max value show the full ring.
+- Dome sprites rotate about their measured pivot, sized so the dome hugs the seat groove. Hit bounds may exceed the drawn dome (per-slider `domeScale` property) so tiny knobs stay grabbable.
+- Toggles SNAP between off/on sprites (no cross-fade), anchored by the measured base centre so the base stays planted while the lever flips. Give bounds extra width so the lever never clips.
+- LED jewels, live numeric readouts: pure code. Readouts on the baked plate are black (`theme::ink`), not grey.
+- Components over the plate are invisible hit areas (`componentID` checks in the LookAndFeel suppress their own drawing when the chassis asset exists).
+- Keep the full vector UI as fallback when skin assets are missing.
+
+## Verify visually before declaring done
+Build standalone, screenshot, and zoom-crop each control region (buttons, each knob, toggles) side-by-side against the reference. Fix by re-measuring, not nudging. Click-test hit areas via accessibility (`osascript` click at fractional coords).

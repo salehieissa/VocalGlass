@@ -241,6 +241,7 @@ namespace
             { "Aggressive",       { {"split",1}, {"freq",6500}, {"threshold",-44}, {"scType",0}, {"monitor",0} } },
             { "Sibilance Tamer",  { {"split",1}, {"freq",6800}, {"threshold",-34}, {"scType",1}, {"monitor",0} } },
             { "Bright Vocal Fix", { {"split",1}, {"freq",8000}, {"threshold",-30}, {"scType",2}, {"monitor",0} } },
+            { "Signature",        { {"split",1}, {"freq",4500}, {"threshold",-27.5f}, {"scType",0}, {"monitor",0} } },
         };
         return presets;
     }

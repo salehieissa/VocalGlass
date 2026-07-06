@@ -42,11 +42,13 @@ public:
         relFastCoeff  = std::exp (-1.0 / (0.080 * sampleRate));   // ~80 ms initial
         relSlowCoeff  = std::exp (-1.0 / (1.800 * sampleRate));   // ~1.8 s tail
         makeupSmoothCoeff = std::exp (-1.0 / (0.250 * sampleRate));
+        analogGateCoeff   = std::exp (-1.0 / (0.120 * sampleRate));   // ~120 ms fade
 
         env = 0.0;
         autoMakeupDb = 0.0;
         humPhase = 0.0;
         noiseLp = 0.0f;
+        analogGate = 0.0f;
         meterIn = meterOut = meterGr = 0.0f;
 
         random.setSeedRandomly();
@@ -164,10 +166,16 @@ public:
 
             // --- analog colouration (subtle hum + DARK noise) ---
             // The noise is heavily low-passed so it reads as a soft "warmth"
-            // floor rather than bright white hiss in the top octave.
+            // floor rather than bright white hiss in the top octave. The whole
+            // colouration is gated by the input level so the plugin is truly
+            // silent when nothing is playing (no idle self-noise on a muted
+            // track); it fades back in under real signal where it's masked.
             float hum = 0.0f, noise = 0.0f;
             if (analog != AnalogOff)
             {
+                const float gateTarget = inAbs > 3.16e-4f ? 1.0f : 0.0f;   // ~ -70 dB
+                analogGate = gateTarget + (analogGate - gateTarget) * (float) analogGateCoeff;
+
                 const double humHz = (analog == Hum50) ? 50.0 : 60.0;
                 hum = 0.0050f * std::sin ((float) humPhase);                 // ~ -46 dB
                 humPhase += juce::MathConstants<double>::twoPi * humHz / sampleRate;
@@ -177,6 +185,9 @@ public:
                 const float white = random.nextFloat() * 2.0f - 1.0f;
                 noiseLp += 0.035f * (white - noiseLp);   // ~1-stage LP, very dark
                 noise = noiseLp * 0.0042f;               // dark, ~ -58 dB but no hiss
+
+                hum   *= analogGate;
+                noise *= analogGate;
             }
 
             // --- per-channel: compress, makeup, parallel mix, trim, analog ---
@@ -244,6 +255,8 @@ private:
     double humPhase = 0.0;
     juce::Random random;
     float  noiseLp = 0.0f;   // low-pass state that darkens the analog noise
+    float  analogGate = 0.0f;        // input-gated so silence in = silence out
+    double analogGateCoeff = 0.999;
 
     float meterIn = -60.0f, meterOut = -60.0f, meterGr = 0.0f;
 };

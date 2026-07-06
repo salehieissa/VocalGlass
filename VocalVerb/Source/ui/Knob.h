@@ -60,9 +60,34 @@ public:
 
     juce::Slider& getSlider() { return slider; }
 
+    // Plate mode: caption + ring seat are baked into the chassis and the value
+    // text is drawn by the editor; the slider draws a rotating chrome dome
+    // sprite (per domeID) sweeping the full 360 from 6 o'clock (matching the
+    // wedge revealed from the ON plate).
+    void setPlate (bool p, const juce::String& domeID = "dome-small")
+    {
+        plate = p;
+        title.setVisible (! p);
+        value.setVisible (! p);
+        if (p)
+        {
+            slider.setComponentID (domeID);
+            slider.setRotaryParameters (juce::MathConstants<float>::pi,
+                                        juce::MathConstants<float>::pi * 3.0f, true);
+        }
+        resized();
+    }
+
+    juce::String getValueText() const { return value.getText(); }
+
     void resized() override
     {
         auto r = getLocalBounds();
+        if (plate)
+        {
+            slider.setBounds (r);
+            return;
+        }
         const int titleH = large ? 26 : 18;
         const int valueH = large ? 40 : 18;
         title.setBounds (r.removeFromTop (titleH));
@@ -75,6 +100,7 @@ private:
     static constexpr float kEnd   = juce::MathConstants<float>::pi * 2.75f;
 
     bool large;
+    bool plate = false;
     juce::Label title, value;
     juce::Slider slider;
     std::function<juce::String (double)> formatter;

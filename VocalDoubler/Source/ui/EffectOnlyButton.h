@@ -17,8 +17,12 @@ public:
         setClickingTogglesState (true);
     }
 
+    bool plate = false;   // baked into the chassis; editor masks the lit state
+
     void paintButton (juce::Graphics& g, bool highlighted, bool /*down*/) override
     {
+        if (plate) return;
+
         auto r = getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
         const bool on = getToggleState();

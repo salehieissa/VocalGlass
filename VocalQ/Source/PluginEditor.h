@@ -8,6 +8,7 @@
 #include "ui/EQDisplay.h"
 #include "ui/Glyph.h"
 #include "ui/Bounce.h"
+#include "../../common/ui/Skin.h"
 #include "../../common/Licensing/ActivationOverlay.h"
 
 //==============================================================================
@@ -21,9 +22,11 @@ public:
     int  type   = 0;   // BandType for glyph
     bool selected = false;
     bool bandOn = true;
+    bool plate = false;   // pill is baked; selection is masked from the ON plate
 
     void paintButton (juce::Graphics& g, bool over, bool) override
     {
+        if (plate) return;
         auto r = getLocalBounds().toFloat().reduced (1.5f);
         const float corner = 9.0f;
         if (selected)
@@ -72,8 +75,10 @@ class PowerButton : public juce::Button
 {
 public:
     PowerButton() : juce::Button ("power") { setClickingTogglesState (true); }
+    bool plate = false;
     void paintButton (juce::Graphics& g, bool, bool) override
     {
+        if (plate) return;
         auto r = getLocalBounds().toFloat();
         const bool on = getToggleState();
         const auto c = r.getCentre();
@@ -99,8 +104,10 @@ public:
     TypeBtn() : juce::Button ("type") {}
     int type = 0;
     bool selected = false;
+    bool plate = false;
     void paintButton (juce::Graphics& g, bool over, bool) override
     {
+        if (plate) return;
         auto r = getLocalBounds().toFloat().reduced (1.0f);
         const float corner = 7.0f;
         if (selected)
@@ -165,6 +172,7 @@ private:
     std::array<Bouncy<juce::TextButton>, 3> chanBtns;   // Stereo / Mid / Side
     std::array<Bouncy<TypeBtn>, 6> typeBtns;            // 6 filter types
     Knob freqK, qK, gainK, rangeK, threshK, atkK, relK;
+    std::array<juce::Label, 7> knobVals;   // plate mode: live values in the baked capsules
     Bouncy<juce::TextButton> soloBtn;
 
     std::unique_ptr<SA> aFreq, aQ, aGain, aRange, aThresh, aAtk, aRel;
@@ -174,6 +182,15 @@ private:
 
     juce::Rectangle<int> panelArea, displayArea;
     int divX1 = 0, divX2 = 0;
+
+    // ---- photoreal plate skin ----
+    juce::Image chassisImg, chassisOnImg;
+    juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const;
+    void maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect);
+    void maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<int> screenRect, int featherPx);
+    void drawRingWedge (juce::Graphics& g, juce::Slider& s, float cxFrac, float cyFrac,
+                        float domeRFrac, float solidRFrac, float maxRFrac);
+    void paintPlate (juce::Graphics& g);
 
     // Full-editor "enter your license key" overlay (shown until activated).
     ActivationOverlay licenseOverlay { proc.license, "VocalQ", "https://vocalessential.com",

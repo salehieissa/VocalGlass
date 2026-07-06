@@ -66,6 +66,29 @@ target_link_libraries(VocalGrit
         juce::juce_recommended_warning_flags
 )
 
+# --- optional photoreal UI skin (assets/ui) ---
+# Embed whichever candidate assets actually exist; missing ones are skipped and
+# the code falls back to vector drawing for those pieces.
+set(VG_SKIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets/ui")
+set(VG_SKIN_CANDIDATES
+    "grit-chassis@2x.png" "grit-chassis-on@2x.png"
+    "grit-knob-large@2x.png" "grit-knob-small@2x.png"
+    "slider-thumb@2x.png")
+set(VG_SKIN_SOURCES "")
+foreach(name ${VG_SKIN_CANDIDATES})
+    if(EXISTS "${VG_SKIN_DIR}/${name}")
+        list(APPEND VG_SKIN_SOURCES "${VG_SKIN_DIR}/${name}")
+    endif()
+endforeach()
+if(VG_SKIN_SOURCES)
+    juce_add_binary_data(VocalGritSkin
+        NAMESPACE   SkinBinary
+        HEADER_NAME SkinBinary.h
+        SOURCES     ${VG_SKIN_SOURCES})
+    target_link_libraries(VocalGrit PRIVATE VocalGritSkin)
+    target_compile_definitions(VocalGrit PUBLIC VG_HAS_SKIN=1)
+endif()
+
 # ---------------------------------------------------------------------------
 # Optional bundled UI font. Drop SFProDisplay.ttf (and optionally
 # SFProDisplayBold.ttf) into <repo>/fonts/ and it gets embedded in the binary

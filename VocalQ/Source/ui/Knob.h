@@ -36,8 +36,25 @@ public:
 
     juce::Slider& getSlider() { return slider; }
 
+    // Plate mode: caption, range marks and value capsule are baked into the
+    // chassis — the component shrinks to just the dome square and paints
+    // nothing itself (the editor owns the capsule value labels).
+    void setPlateMode (bool p)
+    {
+        plateMode = p;
+        name.setVisible (! p);
+        resized();
+        repaint();
+    }
+
+    juce::String valueText() const
+    {
+        return fmt ? fmt (slider.getValue()) : juce::String (slider.getValue(), 1);
+    }
+
     void paint (juce::Graphics& g) override
     {
+        if (plateMode) return;
         g.setColour (theme::inkSoft);
         g.setFont (theme::font (10.0f));
         auto bottom = getLocalBounds().removeFromBottom (14);
@@ -49,6 +66,7 @@ public:
 
     void paintOverChildren (juce::Graphics& g) override
     {
+        if (plateMode) return;
         // drawn on top of the slider disc so the value is always visible
         g.setColour (theme::accent);
         g.setFont (theme::font (isBig ? 20.0f : 16.0f, true));
@@ -61,6 +79,12 @@ public:
     void resized() override
     {
         auto r = getLocalBounds();
+        if (plateMode)
+        {
+            sliderArea = r;
+            slider.setBounds (r);
+            return;
+        }
         name.setBounds (r.removeFromTop (16));
         r.removeFromBottom (14);
         sliderArea = r;
@@ -77,4 +101,5 @@ private:
     juce::Rectangle<int> sliderArea;
     std::function<juce::String (double)> fmt;
     bool isBig = false;
+    bool plateMode = false;
 };

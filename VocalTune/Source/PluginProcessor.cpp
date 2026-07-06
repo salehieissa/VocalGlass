@@ -206,6 +206,7 @@ namespace
             { "Natural",        38.0f,  40.0f, 60.0f, true,  false,  -1,  -1 },
             { "Subtle",         55.0f,  60.0f, 80.0f, true,  false,  -1,  -1 },
             { "Robot",           0.0f,   0.0f,  0.0f, false, false,   0,  -1 },
+            { "Signature",       0.0f,   0.0f,  0.0f, true,  false,  -1,  -1 },
         };
         return presets;
     }

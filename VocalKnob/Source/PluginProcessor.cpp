@@ -113,6 +113,7 @@ namespace
             { "tape grit",      52.0f, Maximizer::Dirty },  // saturated character
             { "blown",          80.0f, Maximizer::Blown },  // aggressive
             { "full send",     100.0f, Maximizer::Blown },  // max
+            { "Signature",      35.0f, Maximizer::Clean },  // Butch Vig tone role
         };
         return presets;
     }

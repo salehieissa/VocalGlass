@@ -11,6 +11,7 @@ class Bubble : public juce::Component
 {
 public:
     void setText (const juce::String& t) { text = t; repaint(); }
+    void setFontHeight (float h) { fontHeight = h; repaint(); }
 
     void paint (juce::Graphics& g) override
     {
@@ -23,12 +24,13 @@ public:
         g.setColour (theme::cardLine);
         g.drawRoundedRectangle (r, radius, 1.0f);
         g.setColour (theme::accent);
-        g.setFont (theme::font (13.0f, true));
+        g.setFont (theme::font (fontHeight, true));
         g.drawText (text, getLocalBounds(), juce::Justification::centred);
     }
 
 private:
     juce::String text;
+    float fontHeight = 13.0f;
 };
 
 //==============================================================================
@@ -49,6 +51,9 @@ public:
         smoothed = t > smoothed ? t : smoothed * 0.82f + t * 0.18f;
         repaint();
     }
+
+    // Smoothed 0..1 position for the plate renderer (masks the baked channel).
+    float getT() const noexcept { return smoothed; }
 
     void paint (juce::Graphics& g) override
     {

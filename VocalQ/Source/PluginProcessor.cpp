@@ -303,6 +303,16 @@ namespace
             { "Full & Round", {
                 { "b1_type", (float) (int) BandType::LowShelf }, { "b1_freq", 110.0f }, { "b1_gain", 3.0f },
                 { "b6_type", (float) (int) BandType::HighShelf }, { "b6_freq", 10000.0f }, { "b6_gain", -1.0f } } },
+            { "Signature Cleanup", {
+                { "b0_freq", 100.0f }, { "b0_q", 1.0f },                        // steep high-pass cleanup
+                { "b2_freq", 200.0f }, { "b2_gain", -3.0f }, { "b2_q", 1.2f },  // mud dip
+                { "b3_freq", 550.0f }, { "b3_gain", -1.5f },                    // boxiness
+                { "b4_freq", 2000.0f }, { "b4_gain", -2.0f }, { "b4_q", 2.0f }, // honk
+                { "b5_freq", 5000.0f }, { "b5_gain", -2.5f }, { "b5_q", 2.5f } } }, // harshness
+            { "Signature Polish", {
+                { "b0_freq", 60.0f },                                           // gentle high-pass
+                { "b4_freq", 2000.0f }, { "b4_gain", 1.5f }, { "b4_q", 1.5f },  // presence lift
+                { "b6_type", (float) (int) BandType::HighShelf }, { "b6_freq", 10000.0f }, { "b6_gain", 1.0f } } },
         };
         return presets;
     }

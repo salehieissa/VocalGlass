@@ -17,9 +17,26 @@ public:
     void setUnitText (const juce::String& t) { unitText = t; }
     void setTaps     (float fb)              { decay = juce::jlimit (0.2f, 0.97f, 0.4f + fb * 0.55f); }
 
+    // Plate mode: the card surface, corner tags and dotted patterns are baked
+    // into the chassis; only the live number and unit are drawn.
+    bool plate = false;
+
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat();
+
+        if (plate)
+        {
+            g.setColour (theme::ink);
+            g.setFont (theme::font (juce::jmin (66.0f, r.getHeight() * 0.46f), true));
+            g.drawText (bigText, r.withTrimmedBottom (r.getHeight() * 0.22f),
+                        juce::Justification::centred);
+            g.setColour (theme::inkSoft);
+            g.setFont (theme::font (15.0f, false));
+            g.drawText (unitText, r.withTrimmedTop (r.getHeight() * 0.70f),
+                        juce::Justification::centred);
+            return;
+        }
 
         // Floating-card surface (the soft cast shadow is drawn by the editor
         // behind this component so it never clips against our own bounds).

@@ -248,6 +248,7 @@ namespace
             { "Ping-Pong Wide",       5,  1,   350, DelayEngine::PingPong,50,  10,  0.25f, 130, 13000, false,  45,  0,  2,   false },
             { "Ambient Wash",         6,  1,   350, DelayEngine::PingPong,66,  32,  0.35f, 160,  7000, true,   34,  0,  5,   false },
             { "Lo-Fi Analog",         5,  1,   350, DelayEngine::Dual,    55,  22,  0.30f, 170,  5500, true,   40,  0,  7,   true  },
+            { "Signature",            2,  1,   350, DelayEngine::PingPong,35,  10,  0.30f, 200,  7000, true,   25,  0,  1,   false },
         };
         return presets;
     }

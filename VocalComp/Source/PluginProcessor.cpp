@@ -164,6 +164,8 @@ namespace
             { "Parallel Warm", -34.0f,  5.0f,   8.0f, 140.0f,  5.0f,  45.0f, 1.0f, Compressor::Warm, -80.0f },
             { "Aggressive",    -34.0f,  8.0f,   4.0f, 110.0f,  6.0f, 100.0f, 0.0f, Compressor::Arc,  -80.0f },
             { "Gated Tight",   -24.0f,  3.0f,  10.0f, 140.0f,  3.5f, 100.0f, 0.0f, Compressor::Arc,  -55.0f },
+            { "Signature 1",   -20.7f,  4.0f,   5.0f,  50.0f, 10.1f, 100.0f, 0.0f, Compressor::Arc,  -80.0f },
+            { "Signature 2",   -14.8f,  2.0f,   5.0f,  50.0f,  3.9f, 100.0f, 0.0f, Compressor::Arc,  -80.0f },
         };
         return presets;
     }

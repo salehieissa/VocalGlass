@@ -15,11 +15,35 @@ public:
 
     explicit ValueReadout (juce::String captionText) : caption (std::move (captionText)) {}
 
+    // Plate mode: the caption is baked into the chassis, so only the big live
+    // number + accent "%" are drawn, filling the whole bounds.
+    bool plate = false;
+
     void setValue01 (float v) { value01 = juce::jlimit (0.0f, 1.0f, v); repaint(); }
 
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat();
+
+        if (plate)
+        {
+            const int pct = juce::roundToInt (value01 * 100.0f);
+            auto bigF = theme::font (r.getHeight() * 0.98f, true);
+            auto pctF = theme::font (r.getHeight() * 0.38f, true);
+
+            const juce::String num (pct);
+            const float nw = juce::GlyphArrangement::getStringWidth (bigF, num);
+
+            g.setColour (theme::ink);
+            g.setFont (bigF);
+            g.drawText (num, r.withWidth (nw + 6.0f), juce::Justification::centredLeft);
+
+            g.setColour (theme::accent);
+            g.setFont (pctF);
+            g.drawText ("%", r.withTrimmedLeft (nw + 10.0f).withTrimmedTop (r.getHeight() * 0.10f),
+                        juce::Justification::topLeft);
+            return;
+        }
 
         auto capArea = r.removeFromTop (r.getHeight() * 0.30f);
         theme::spacedText (g, caption, capArea, theme::inkSoft,

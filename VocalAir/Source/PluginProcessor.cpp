@@ -131,6 +131,7 @@ namespace
             { "Crisp Top",    28.0f, 40.0f, -1.5f },  // crisp but body-safe
             { "Breathy",      22.0f, 44.0f, -1.5f },  // airy, intimate
             { "Max Air",      58.0f, 60.0f, -3.0f },  // aggressive, still tasteful
+            { "Signature",    15.0f, 20.0f,  0.0f },  // subtle owner-chain polish
         };
         return presets;
     }

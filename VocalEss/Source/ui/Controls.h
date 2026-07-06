@@ -31,10 +31,28 @@ public:
         repaint();
     }
 
-    void resized() override { label.setBounds (getLocalBounds().withTrimmedRight (26)); }
+    // Plate mode: the recessed capsule + 'Hz' suffix are baked into the
+    // chassis, so paint only the live number — centred in the capsule, bold.
+    void setPlateMode (bool p)
+    {
+        plateMode = p;
+        if (plateMode)
+            label.setFont (theme::font (18.0f, true));
+        resized();
+        repaint();
+    }
+
+    void resized() override
+    {
+        label.setBounds (plateMode ? getLocalBounds()
+                                   : getLocalBounds().withTrimmedRight (26));
+    }
 
     void paint (juce::Graphics& g) override
     {
+        if (plateMode)
+            return;
+
         auto r = getLocalBounds().toFloat().reduced (1.0f);
         g.setColour (juce::Colours::white);
         g.fillRoundedRectangle (r, 12.0f);
@@ -84,6 +102,7 @@ private:
     juce::Label label;
     float dragStartNorm = 0.0f;
     bool  editing = false;
+    bool  plateMode = false;
 };
 
 //==============================================================================
@@ -100,12 +119,35 @@ public:
 
     int index() const { return (int) std::round (param.convertFrom0to1 (param.getValue())); }
 
+    // Plate mode: the glass button, pink outline and chevron are baked. The
+    // baked icon shows the high-pass curve, so the live curve is painted over
+    // a small cover patch matching the plate glass (sampled by the editor).
+    void setPlateMode (bool p, juce::Colour glassColour)
+    {
+        plateMode = p;
+        glass = glassColour;
+        repaint();
+    }
+
     void paint (juce::Graphics& g) override
     {
         auto full = getLocalBounds().toFloat().reduced (1.0f);
         auto iconR = full.removeFromLeft (full.getWidth() * 0.62f);
         full.removeFromLeft (6.0f);
         auto chevR = full;
+
+        if (plateMode)
+        {
+            // the baked icon already shows the high-pass curve; only when a
+            // different type is selected cover it and draw the live curve
+            if (index() != 0)
+            {
+                g.setColour (glass);
+                g.fillRoundedRectangle (iconR.reduced (5.0f), 8.0f);
+                paintCurve (g, iconR.reduced (12.0f, 14.0f));
+            }
+            return;
+        }
 
         // icon box (pink outline)
         g.setColour (juce::Colours::white);
@@ -114,34 +156,7 @@ public:
         g.drawRoundedRectangle (iconR, 12.0f, 1.6f);
 
         // curve
-        auto c = iconR.reduced (12.0f, 14.0f);
-        juce::Path curve;
-        const float y0 = c.getY(), y1 = c.getBottom();
-        const float x0 = c.getX(), x1 = c.getRight();
-        switch (index())
-        {
-            case 1: // bell
-                curve.startNewSubPath (x0, y1);
-                curve.quadraticTo (c.getCentreX() - c.getWidth() * 0.18f, y1,
-                                   c.getCentreX(), y0);
-                curve.quadraticTo (c.getCentreX() + c.getWidth() * 0.18f, y1, x1, y1);
-                break;
-            case 2: // high shelf
-                curve.startNewSubPath (x0, y1);
-                curve.lineTo (c.getCentreX() - 4.0f, y1);
-                curve.quadraticTo (c.getCentreX(), y1, c.getCentreX() + 6.0f, y0 + (y1 - y0) * 0.25f);
-                curve.lineTo (x1, y0 + (y1 - y0) * 0.25f);
-                break;
-            default: // high pass
-                curve.startNewSubPath (x0, y1);
-                curve.lineTo (c.getCentreX() - 6.0f, y1);
-                curve.quadraticTo (c.getCentreX() + 2.0f, y1, c.getCentreX() + 8.0f, y0);
-                curve.lineTo (x1, y0);
-                break;
-        }
-        g.setColour (theme::accent);
-        g.strokePath (curve, juce::PathStrokeType (2.4f, juce::PathStrokeType::curved,
-                                                   juce::PathStrokeType::rounded));
+        paintCurve (g, iconR.reduced (12.0f, 14.0f));
 
         // chevron box
         g.setColour (juce::Colours::white);
@@ -179,6 +194,37 @@ public:
     void refresh() { repaint(); }
 
 private:
+    void paintCurve (juce::Graphics& g, juce::Rectangle<float> c)
+    {
+        juce::Path curve;
+        const float y0 = c.getY(), y1 = c.getBottom();
+        const float x0 = c.getX(), x1 = c.getRight();
+        switch (index())
+        {
+            case 1: // bell
+                curve.startNewSubPath (x0, y1);
+                curve.quadraticTo (c.getCentreX() - c.getWidth() * 0.18f, y1,
+                                   c.getCentreX(), y0);
+                curve.quadraticTo (c.getCentreX() + c.getWidth() * 0.18f, y1, x1, y1);
+                break;
+            case 2: // high shelf
+                curve.startNewSubPath (x0, y1);
+                curve.lineTo (c.getCentreX() - 4.0f, y1);
+                curve.quadraticTo (c.getCentreX(), y1, c.getCentreX() + 6.0f, y0 + (y1 - y0) * 0.25f);
+                curve.lineTo (x1, y0 + (y1 - y0) * 0.25f);
+                break;
+            default: // high pass
+                curve.startNewSubPath (x0, y1);
+                curve.lineTo (c.getCentreX() - 6.0f, y1);
+                curve.quadraticTo (c.getCentreX() + 2.0f, y1, c.getCentreX() + 8.0f, y0);
+                curve.lineTo (x1, y0);
+                break;
+        }
+        g.setColour (theme::accent);
+        g.strokePath (curve, juce::PathStrokeType (2.4f, juce::PathStrokeType::curved,
+                                                   juce::PathStrokeType::rounded));
+    }
+
     void timerCallback() override
     {
         scale += (1.0f - scale) * 0.30f;
@@ -194,4 +240,6 @@ private:
 
     juce::RangedAudioParameter& param;
     float scale = 1.0f;
+    bool plateMode = false;
+    juce::Colour glass = juce::Colours::white;
 };

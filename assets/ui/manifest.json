@@ -1,0 +1,78 @@
+{
+  "_comment": "VocalGlass PHOTOREAL asset board — kit: frosted white glass + chrome + dark smoked-glass screens + neon pink. Philosophy: code draws geometry/shadows/glows/motion; assets carry ONLY photoreal material. Every asset is optional (vector fallback). Sizes are @2x px. 9-slice insets in asset px. 'knob-rotate' = single image spun in code (indicator points up). 'rotate-pivot' = image pivoted about a point in code (needle). 'tile-x' = repeated horizontally. 'tile-overlay' = tiled, drawn over surfaces at low opacity.",
+  "scale": 2,
+  "kit": "glass-chrome-neon",
+  "palette": {
+    "panel": "#fdfdff",
+    "bg": "#f1f2f5",
+    "accent": "#ec0f8f",
+    "accentHi": "#f64bad",
+    "accentLo": "#cc0a7c",
+    "ink": "#17171c",
+    "inkSoft": "#8b8b96",
+    "screenInk": "#e9ecf2"
+  },
+  "shared": {
+    "knob":      { "file": "knob@2x.png",      "type": "knob-rotate", "size": [300, 300], "note": "indicator points straight up; code rotates" },
+    "knobLarge": { "file": "knob-large@2x.png", "type": "knob-rotate", "size": [440, 440], "note": "big detailed knob for hero controls; notch up" },
+    "knobSmall": { "file": "knob-small@2x.png", "type": "knob-rotate", "size": [220, 220], "note": "compact knob for utility rows; notch up" },
+    "faceplate": { "file": "faceplate@2x.png", "type": "nineslice",   "size": [600, 600], "insets": { "left": 170, "right": 170, "top": 170, "bottom": 170 } },
+    "btnOff":    { "file": "btn-off@2x.png",   "type": "nineslice",   "size": [360, 140], "insets": { "left": 70, "right": 70, "top": 70, "bottom": 70 } },
+    "btnOn":     { "file": "btn-on@2x.png",    "type": "nineslice",   "size": [360, 140], "insets": { "left": 70, "right": 70, "top": 70, "bottom": 70 } },
+    "screen":    { "file": "screen@2x.png",    "type": "nineslice",   "size": [600, 320], "insets": { "left": 60, "right": 60, "top": 60, "bottom": 60 } },
+    "faderCap":  { "file": "fader-cap@2x.png", "type": "sprite",      "size": [120, 120] },
+    "faderTrack":{ "file": "fader-track@2x.png","type": "nineslice",  "size": [360, 80], "insets": { "left": 40, "right": 40, "top": 40, "bottom": 40 } },
+    "texture":   { "file": "texture@2x.png",   "type": "tile-overlay","size": [1024, 1024], "opacity": 0.06 },
+    "glow":      { "file": "glow@2x.png",      "type": "sprite",      "size": [256, 256] },
+
+    "toggleOff": { "file": "toggle-off@2x.png","type": "sprite",      "size": [200, 280] },
+    "toggleOn":  { "file": "toggle-on@2x.png", "type": "sprite",      "size": [200, 280] },
+    "ledOff":    { "file": "led-off@2x.png",   "type": "sprite",      "size": [120, 120] },
+    "ledOn":     { "file": "led-on@2x.png",    "type": "sprite",      "size": [120, 120] },
+    "screw":     { "file": "screw@2x.png",     "type": "sprite",      "size": [80, 80] },
+    "frame":     { "file": "frame@2x.png",     "type": "nineslice",   "size": [600, 400], "insets": { "left": 60, "right": 60, "top": 60, "bottom": 60 } },
+    "nameplate": { "file": "nameplate@2x.png", "type": "nineslice",   "size": [600, 160], "insets": { "left": 80, "right": 80, "top": 60, "bottom": 60 } },
+    "segOff":    { "file": "seg-off@2x.png",   "type": "tile-x",      "size": [80, 160] },
+    "segOn":     { "file": "seg-on@2x.png",    "type": "tile-x",      "size": [80, 160] },
+    "knobPointer":{ "file": "knob-pointer@2x.png","type": "knob-rotate","size": [300, 300], "note": "pointer/chickenhead; points up; code rotates" },
+    "jewel":     { "file": "jewel@2x.png",     "type": "sprite",      "size": [120, 120] },
+    "smudge":    { "file": "smudge@2x.png",    "type": "tile-overlay","size": [1024, 1024], "opacity": 0.05, "blend": "screen" },
+    "grain":     { "file": "grain@2x.png",     "type": "tile-overlay","size": [512, 512], "opacity": 0.08, "blend": "screen" },
+    "flare":     { "file": "flare@2x.png",     "type": "sprite",      "size": [512, 512], "blend": "screen" },
+    "bg":        { "file": "bg@2x.png",        "type": "backdrop",    "size": [1200, 800] }
+  },
+  "signatures": {
+    "VocalTune": {
+      "keyboard":    { "file": "tune-keyboard@2x.png",     "type": "tile-x", "size": [360, 360], "note": "one octave (C..B), unlit; repeated horizontally" },
+      "keyboardLit": { "file": "tune-keyboard-lit@2x.png", "type": "tile-x", "size": [360, 360], "note": "same geometry as keyboard, every key glowing pink; code reveals only the lit key's column (Method B)" }
+    },
+    "Vocal2A": {
+      "vuFace":   { "file": "2a-vu-face@2x.png",   "type": "sprite", "size": [600, 400] },
+      "vuNeedle": { "file": "2a-vu-needle@2x.png", "type": "rotate-pivot", "size": [60, 420], "pivot": [30, 400], "note": "pivots at bottom; code swings it" }
+    },
+    "VocalAir": {
+      "grille": { "file": "air-grille@2x.png", "type": "tile-overlay", "size": [512, 512], "opacity": 0.5 }
+    },
+    "VocalGrit": {
+      "wear": { "file": "grit-wear@2x.png", "type": "tile-overlay", "size": [1024, 1024], "opacity": 0.1 },
+      "tube": { "file": "grit-tube@2x.png", "type": "sprite", "size": [300, 420] }
+    },
+    "VocalComp": {
+      "grFace":   { "file": "gr-face@2x.png",   "type": "sprite", "size": [600, 400] },
+      "grNeedle": { "file": "2a-vu-needle@2x.png", "type": "rotate-pivot", "size": [60, 420], "pivot": [30, 400], "note": "shares the 2A needle" }
+    },
+    "VocalQ": {
+      "eqGlass": { "file": "eq-glass@2x.png", "type": "nineslice", "size": [600, 320], "insets": { "left": 60, "right": 60, "top": 60, "bottom": 60 } },
+      "eqNode":  { "file": "eq-node@2x.png",  "type": "sprite", "size": [120, 120] }
+    },
+    "VocalVerb": {
+      "backdrop": { "file": "verb-backdrop@2x.png", "type": "backdrop", "size": [1200, 800] }
+    },
+    "VocalDelay": {
+      "reel": { "file": "delay-reel@2x.png", "type": "sprite", "size": [360, 360] }
+    },
+    "VocalDoubler": {
+      "orbs": { "file": "doubler-orbs@2x.png", "type": "sprite", "size": [600, 300] }
+    }
+  }
+}

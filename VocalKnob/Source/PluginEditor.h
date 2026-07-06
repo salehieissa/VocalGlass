@@ -7,6 +7,7 @@
 #include "ui/KnobLookAndFeel.h"
 #include "ui/KnobDial.h"
 #include "../../common/Licensing/ActivationOverlay.h"
+#include "../../common/ui/Skin.h"
 #include <array>
 
 //==============================================================================
@@ -40,6 +41,16 @@ private:
     juce::Label presetName;
 
     juce::Rectangle<int> cardArea, presetPill;
+
+    // Baked photoreal plate pair (knob-chassis / knob-chassis-on). The OFF
+    // plate is drawn full-bleed; lit states are masked from the ON plate.
+    juce::Image chassisImg, chassisOnImg;
+
+    juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const;
+    void maskFromOn (juce::Graphics&, juce::Rectangle<int> screenRect);
+    void maskFromOnFeathered (juce::Graphics&, juce::Rectangle<int> screenRect, int featherPx);
+    void drawDialWedge (juce::Graphics&);
+    void paintPlate (juce::Graphics&);
 
     // Full-editor "enter your license key" overlay (shown until activated).
     ActivationOverlay licenseOverlay { proc.license, "VocalKnob", "https://vocalessential.com",

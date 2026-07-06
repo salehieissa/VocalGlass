@@ -24,6 +24,12 @@ public:
 
     DoubleDisplay() { startTimerHz (30); }
 
+    // Plate mode: the recessed dark disc, "DOUBLE" title, guide circle and the
+    // decorative wavy rings are baked into the chassis. Only the dynamic layer
+    // is drawn: dashed track, value arc, radius line, centre anchor and the
+    // draggable node.
+    bool plate = false;
+
     void setValues (float sep01, float var01)
     {
         sep = juce::jlimit (0.0f, 1.0f, sep01);
@@ -39,6 +45,8 @@ public:
         const auto c = bounds.getCentre();
         const float R = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f - 6.0f;
 
+        if (! plate)
+        {
         drawWavyRings (g, c, R);
 
         // recessed light face: gentle inner shadow at the top, light catch at the
@@ -66,6 +74,7 @@ public:
         theme::spacedText (g, "double",
                            juce::Rectangle<float> (c.x - R, c.y - R * 0.66f, R * 2.0f, R * 0.2f),
                            theme::inkSoft, R * 0.085f, 2.6f, true, juce::Justification::centred);
+        } // ! plate
 
         // node geometry
         const float nodeR = juce::jmap (var, 0.0f, 1.0f, R * 0.16f, R * 0.74f);

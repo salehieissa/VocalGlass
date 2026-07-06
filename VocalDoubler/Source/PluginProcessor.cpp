@@ -170,6 +170,7 @@ namespace
             { "Tight Stack",      40.0f,  16.0f, 52.0f, false, 0.14f, false, 2 },
             { "Lush Quad",        74.0f,  52.0f, 70.0f, false, 0.30f, false, 2 },
             { "Hard Pan Wide",   100.0f,  42.0f, 62.0f, false, 0.24f, false, 2 },
+            { "Signature",        36.0f,  45.0f, 50.0f, false, 0.20f, false, 2 },
         };
         return presets;
     }

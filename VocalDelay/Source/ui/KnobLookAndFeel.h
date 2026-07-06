@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Theme.h"
+#include "../../../common/ui/Skin.h"
 
 //==============================================================================
 // Premium light look: soft white neumorphic dome knobs with a glowing accent
@@ -11,6 +12,13 @@
 class KnobLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    // Plate mode: static art is baked into the chassis; rotary sliders draw
+    // only a rotating chrome dome sprite and buttons become invisible hit
+    // areas (componentID "hit") whose lit states the editor masks from the ON
+    // plate.
+    bool plate = false;
+    juce::Image domeLarge, domeSmall;
+
     KnobLookAndFeel()
     {
        #if VG_HAS_BUNDLED_FONT
@@ -93,6 +101,20 @@ public:
                            float pos, float startAngle, float endAngle,
                            juce::Slider& s) override
     {
+        if (plate)
+        {
+            const auto& sprite = s.getComponentID() == "dome-large" ? domeLarge : domeSmall;
+            if (sprite.isValid())
+            {
+                const float angle = startAngle + pos * (endAngle - startAngle);
+                skin::drawKnobRotated (g, sprite,
+                                       juce::Rectangle<float> ((float) x, (float) y,
+                                                               (float) width, (float) height),
+                                       angle);
+                return;
+            }
+        }
+
         auto bounds = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height)
                           .reduced (5.0f);
         const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f - 2.0f;
@@ -187,6 +209,8 @@ public:
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& b,
                            bool highlighted, bool /*down*/) override
     {
+        if (plate && b.getComponentID() == "hit") return;
+
         auto r = b.getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
         const bool on = b.getToggleState();
@@ -202,9 +226,18 @@ public:
     void drawButtonBackground (juce::Graphics& g, juce::Button& b,
                                const juce::Colour&, bool highlighted, bool /*down*/) override
     {
+        if (plate && b.getComponentID() == "hit") return;
+
         auto r = b.getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
         paintPill (g, r, radius, b.getToggleState(), highlighted);
+    }
+
+    void drawButtonText (juce::Graphics& g, juce::TextButton& b,
+                         bool highlighted, bool down) override
+    {
+        if (plate && b.getComponentID() == "hit") return;
+        juce::LookAndFeel_V4::drawButtonText (g, b, highlighted, down);
     }
 
 private:

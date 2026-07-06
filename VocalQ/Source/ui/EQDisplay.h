@@ -17,6 +17,14 @@ public:
     std::function<void (int)> onSelectBand;
     int selectedBand = 5;
 
+    // Plate mode: the smoked-glass panel, grid, axis labels and empty meter
+    // channels are baked into the chassis. The display draws only the live
+    // layers (spectrum, curve, nodes, meter fills) using the axis mapping
+    // measured from the baked plate (the AI gridlines aren't perfectly
+    // log-uniform, so freq<->x interpolates between the measured octave
+    // positions instead of assuming an ideal log scale).
+    void setPlateMode (bool p) { plateMode = p; repaint(); }
+
     void updateMeters()
     {
         auto smooth = [] (float& s, float target)
@@ -31,6 +39,18 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        if (plateMode)
+        {
+            const float w = (float) getWidth(), h = (float) getHeight();
+            plot = { plateGridFx[0] * w, 0.0245f * h,
+                     (0.9307f - plateGridFx[0]) * w, (0.9870f - 0.0245f) * h };
+            drawSpectrum (g);
+            drawCurve (g);
+            drawNodes (g);
+            drawMeters (g);
+            return;
+        }
+
         plot = getLocalBounds().toFloat().reduced (2.0f);
         plot.removeFromTop (16.0f);     // freq labels
         plot.removeFromLeft (30.0f);    // gain labels
@@ -102,19 +122,57 @@ private:
             p->setValueNotifyingHost (p->getNormalisableRange().convertTo0to1 (v));
     }
 
+    // Baked-plate axis geometry (fractions of the component, measured from the
+    // chassis): x positions of the 16Hz..16kHz octave gridlines, and the 0dB
+    // row + px-per-dB of the gain axis.
+    static constexpr std::array<double, 11> plateGridF  { 16, 32, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
+    static constexpr std::array<float, 11>  plateGridFx { 0.0331f, 0.1285f, 0.2272f, 0.3168f, 0.4080f, 0.4976f,
+                                                          0.5808f, 0.6629f, 0.7488f, 0.8315f, 0.9077f };
+    static constexpr float plateY0Db = 0.5228f, plateFracPerDb = 0.015371f;
+
     float freqToX (double f) const
     {
+        if (plateMode)
+        {
+            const float w = (float) getWidth();
+            const double lf = std::log (juce::jmax (1.0, f));
+            size_t i = 0;
+            while (i + 2 < plateGridF.size() && f > plateGridF[i + 1]) ++i;
+            const double l0 = std::log (plateGridF[i]), l1 = std::log (plateGridF[i + 1]);
+            const double t = (lf - l0) / (l1 - l0);   // <0 / >1 extrapolate with edge slope
+            return juce::jlimit (plot.getX(), plot.getRight(),
+                                 (plateGridFx[i] + (float) t * (plateGridFx[i + 1] - plateGridFx[i])) * w);
+        }
         const double n = std::log (f / fLo) / std::log (fHi / fLo);
         return plot.getX() + (float) n * plot.getWidth();
     }
     double xToFreq (float x) const
     {
+        if (plateMode)
+        {
+            const float fx = x / (float) getWidth();
+            size_t i = 0;
+            while (i + 2 < plateGridFx.size() && fx > plateGridFx[i + 1]) ++i;
+            const double t = (fx - plateGridFx[i]) / (plateGridFx[i + 1] - plateGridFx[i]);
+            const double l0 = std::log (plateGridF[i]), l1 = std::log (plateGridF[i + 1]);
+            return juce::jlimit (fLo, fHi, std::exp (l0 + t * (l1 - l0)));
+        }
         const double n = (x - plot.getX()) / plot.getWidth();
         return fLo * std::pow (fHi / fLo, n);
     }
     static constexpr double gMax = 30.0;   // gain axis range (dB)
-    float gainToY (double dB) const { return plot.getY() + (float) ((gMax - dB) / (2.0 * gMax)) * plot.getHeight(); }
-    double yToGain (float y) const  { return gMax - (double) (y - plot.getY()) / plot.getHeight() * (2.0 * gMax); }
+    float gainToY (double dB) const
+    {
+        if (plateMode)
+            return (plateY0Db - (float) dB * plateFracPerDb) * (float) getHeight();
+        return plot.getY() + (float) ((gMax - dB) / (2.0 * gMax)) * plot.getHeight();
+    }
+    double yToGain (float y) const
+    {
+        if (plateMode)
+            return (plateY0Db - y / (float) getHeight()) / plateFracPerDb;
+        return gMax - (double) (y - plot.getY()) / plot.getHeight() * (2.0 * gMax);
+    }
 
     // Spectrum has its own vertical scale (independent of the gain axis).
     float specToY (double db) const
@@ -192,7 +250,7 @@ private:
             const double f = fLo * std::pow (fHi / fLo, (double) i / N);
             double db = proc.analyzer.levelDb (f);
             db += 3.0 * std::log2 (juce::jmax (40.0, f) / 1000.0);   // gentle tilt so highs read
-            const float x = plot.getX() + (float) i / N * plot.getWidth();
+            const float x = freqToX (f);   // same axis mapping as the nodes
             const float y = juce::jlimit (plot.getY(), plot.getBottom(), specToY (db));
             if (i == 0) { p.startNewSubPath (x, plot.getBottom()); p.lineTo (x, y); }
             else        p.lineTo (x, y);
@@ -202,8 +260,10 @@ private:
 
         juce::Graphics::ScopedSaveState ss (g);
         g.reduceClipRegion (plot.toNearestInt());
-        juce::ColourGradient grad (theme::ink.withAlpha (0.18f), 0.0f, plot.getY(),
-                                   theme::ink.withAlpha (0.05f), 0.0f, plot.getBottom(), false);
+        // on the dark smoked glass the spectrum reads as soft white light
+        const auto specCol = plateMode ? juce::Colours::white : theme::ink;
+        juce::ColourGradient grad (specCol.withAlpha (plateMode ? 0.14f : 0.18f), 0.0f, plot.getY(),
+                                   specCol.withAlpha (plateMode ? 0.03f : 0.05f), 0.0f, plot.getBottom(), false);
         g.setGradientFill (grad);
         g.fillPath (p);
     }
@@ -217,7 +277,7 @@ private:
             const double f = fLo * std::pow (fHi / fLo, (double) i / N);
             double sum = 0.0;
             for (int b = 0; b < VocalQProcessor::kNumBands; ++b) sum += bandMagDb (b, f);
-            const float x = plot.getX() + (float) i / N * plot.getWidth();
+            const float x = freqToX (f);   // same axis mapping as the nodes
             const float y = gainToY (juce::jlimit (-30.0, 30.0, sum));
             if (i == 0) curve.startNewSubPath (x, y);
             else        curve.lineTo (x, y);
@@ -320,6 +380,29 @@ private:
 
     void drawMeters (juce::Graphics& g)
     {
+        if (plateMode)
+        {
+            // fill the baked dark channels bottom-up with neon light
+            const float w = (float) getWidth(), h = (float) getHeight();
+            auto fillBar = [&] (float fx0, float fx1, float dB)
+            {
+                const float n = juce::jlimit (0.0f, 1.0f, (dB + 40.0f) / 40.0f);
+                if (n <= 0.004f) return;
+                juce::Rectangle<float> ch (fx0 * w, 0.0408f * h, (fx1 - fx0) * w, (0.9739f - 0.0408f) * h);
+                auto fill = ch.withTop (ch.getBottom() - n * ch.getHeight()).reduced (1.5f, 0.0f);
+                const float rad = fill.getWidth() * 0.5f;
+                juce::Path p; p.addRoundedRectangle (fill, rad);
+                theme::glowPath (g, p, 0.30f, 6);
+                juce::ColourGradient mg (theme::accentHi, fill.getX(), fill.getY(),
+                                         theme::accentLo, fill.getX(), fill.getBottom(), false);
+                g.setGradientFill (mg);
+                g.fillRoundedRectangle (fill, rad);
+            };
+            fillBar (0.9451f, 0.9552f, mL);
+            fillBar (0.9611f, 0.9717f, mR);
+            return;
+        }
+
         auto right = getLocalBounds().toFloat().removeFromRight (58.0f);
         right.removeFromTop (16.0f);
         right.removeFromBottom (4.0f);
@@ -361,6 +444,7 @@ private:
 
     VocalQProcessor& proc;
     juce::Rectangle<float> plot;
+    bool plateMode = false;
     int dragBand = -1;
     bool dragging = false;
     juce::Point<float> downPos, grabOffset;

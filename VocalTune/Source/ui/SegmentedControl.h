@@ -15,6 +15,12 @@ public:
 
     std::function<void (int)> onChange;
 
+    // Plate mode: the pill (both texts, seam) is baked into the chassis and the
+    // lit segment is masked from the ON plate by the editor — draw nothing.
+    // splitFrac is the measured seam position within the baked pill.
+    bool  plate = false;
+    float splitFrac = 0.5f;
+
     void setIndex (int i, juce::NotificationType n = juce::dontSendNotification)
     {
         i = juce::jlimit (0, 1, i);
@@ -30,11 +36,13 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        setIndex (e.x < getWidth() / 2 ? 0 : 1, juce::sendNotification);
+        setIndex ((float) e.x < (float) getWidth() * splitFrac ? 0 : 1, juce::sendNotification);
     }
 
     void paint (juce::Graphics& g) override
     {
+        if (plate) return;
+
         auto r = getLocalBounds().toFloat().reduced (1.0f);
         const float radius = 9.0f;
 

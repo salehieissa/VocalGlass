@@ -31,6 +31,8 @@ juce_add_plugin(VocalVerb
     IS_SYNTH                FALSE
     NEEDS_MIDI_INPUT        FALSE
     NEEDS_MIDI_OUTPUT       FALSE
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "VocalVerb needs audio input so the standalone app can process your voice."
     COPY_PLUGIN_AFTER_BUILD TRUE
 )
 
@@ -56,6 +58,28 @@ target_link_libraries(VocalVerb
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags
 )
+
+# --- optional photoreal skin assets (shared assets/ui folder) ---
+set(VG_SKIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets/ui")
+set(VG_SKIN_CANDIDATES
+    "verb-chassis@2x.png" "verb-chassis-on@2x.png"
+    "grit-knob-large@2x.png" "grit-knob-small@2x.png")
+set(VG_SKIN_SOURCES "")
+foreach(name ${VG_SKIN_CANDIDATES})
+    if(EXISTS "${VG_SKIN_DIR}/${name}")
+        list(APPEND VG_SKIN_SOURCES "${VG_SKIN_DIR}/${name}")
+    endif()
+endforeach()
+if(VG_SKIN_SOURCES)
+    juce_add_binary_data(VocalVerbSkin
+        NAMESPACE   SkinBinary
+        HEADER_NAME SkinBinary.h
+        SOURCES     ${VG_SKIN_SOURCES})
+    target_link_libraries(VocalVerb PRIVATE VocalVerbSkin)
+    target_compile_definitions(VocalVerb PUBLIC VG_HAS_SKIN=1)
+else()
+    target_compile_definitions(VocalVerb PUBLIC VG_HAS_SKIN=0)
+endif()
 
 # --- optional bundled UI font (drop SFProDisplay.ttf into <repo>/fonts/) ---
 set(VG_FONTS_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/../fonts")

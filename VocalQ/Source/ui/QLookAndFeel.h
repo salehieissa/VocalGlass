@@ -2,17 +2,24 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Theme.h"
+#include "../../../common/ui/Skin.h"
 
 //==============================================================================
 // Premium light look: soft white neumorphic dome knobs with a glowing accent
 // value ring (no indicator dots), recessed slider grooves with white dome
 // thumbs, and clean white pill toggles/buttons that fill with accent when on.
+// In plate mode (photoreal chassis) rotaries draw only the steel dome sprite
+// (seat + neon ring live on the plates) and "hit"-tagged buttons draw nothing.
 //==============================================================================
 class QLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    bool plate = false;
+
     QLookAndFeel()
     {
+        knobSmallImg = skin::cropToDome (skin::image ("grit-knob-small@2x.png"),
+                                         0.4993f, 0.4648f, 0.615f);
         setColour (juce::Slider::textBoxTextColourId, theme::ink);
         setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
         setColour (juce::Label::textColourId, theme::ink);
@@ -37,6 +44,19 @@ public:
     void drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h,
                            float pos, float a0, float a1, juce::Slider& s) override
     {
+        if (plate && knobSmallImg.isValid())
+        {
+            // dome sprite only — seat + neon ring live on the baked plates
+            const float angle = a0 + pos * (a1 - a0);
+            const float scale = (float) s.getProperties().getWithDefault ("domeScale", 1.0);
+            const float side  = (float) juce::jmin (w, h) * scale;
+            const juce::Rectangle<float> dest ((float) x + ((float) w - side) * 0.5f,
+                                               (float) y + ((float) h - side) * 0.5f,
+                                               side, side);
+            skin::drawKnobRotated (g, knobSmallImg, dest, angle);
+            return;
+        }
+
         auto bounds = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h)
                           .reduced (5.0f);
         const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f - 2.0f;
@@ -164,6 +184,8 @@ public:
     void drawButtonBackground (juce::Graphics& g, juce::Button& b,
                                const juce::Colour&, bool highlighted, bool /*down*/) override
     {
+        if (plate && b.getComponentID() == "hit")
+            return;   // pill/circle is baked; lit state is masked from the ON plate
         auto r = b.getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
         paintPill (g, r, radius, b.getToggleState(), highlighted);
@@ -171,6 +193,8 @@ public:
 
     void drawButtonText (juce::Graphics& g, juce::TextButton& b, bool, bool) override
     {
+        if (plate && b.getComponentID() == "hit")
+            return;   // text is baked into the plate
         g.setColour (b.getToggleState() ? juce::Colours::white : theme::ink);
         g.setFont (theme::font ((float) juce::jmin (15, b.getHeight() - 8), true));
         g.drawText (b.getButtonText(), b.getLocalBounds(), juce::Justification::centred, false);
@@ -248,4 +272,6 @@ private:
 
         paintWhiteDome (g, disc);
     }
+
+    juce::Image knobSmallImg;
 };

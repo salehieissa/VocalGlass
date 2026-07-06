@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Theme.h"
+#include "../../../common/ui/Skin.h"
 
 //==============================================================================
 // Premium light look for VocalVerb: soft white neumorphic dome knobs with a
@@ -12,6 +13,13 @@
 class KnobLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    // Plate mode: static art is baked into the chassis. Components tagged with
+    // componentID "hit" become invisible hit areas; the editor masks their lit
+    // states from the ON plate and draws all live text. Knobs tagged
+    // "dome-large"/"dome-small" draw a rotating chrome dome sprite.
+    bool plate = false;
+    juce::Image domeLarge, domeSmall;
+
     KnobLookAndFeel()
     {
        #if VG_HAS_BUNDLED_FONT
@@ -91,6 +99,21 @@ public:
                            float pos, float startAngle, float endAngle,
                            juce::Slider& s) override
     {
+        if (plate)
+        {
+            // ring seat + lit arc live on the plates; the dome sprite rotates here
+            const auto& sprite = s.getComponentID() == "dome-large" ? domeLarge : domeSmall;
+            if (sprite.isValid())
+            {
+                const float angle = startAngle + pos * (endAngle - startAngle);
+                skin::drawKnobRotated (g, sprite,
+                                       juce::Rectangle<float> ((float) x, (float) y,
+                                                               (float) width, (float) height),
+                                       angle);
+            }
+            return;
+        }
+
         auto bounds = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height)
                           .reduced (5.0f);
         const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f - 2.0f;
@@ -181,8 +204,10 @@ public:
     //==========================================================================
     // Flat dropdown: no background, pink text, small pink chevron at the right.
     void drawComboBox (juce::Graphics& g, int width, int height, bool,
-                       int, int, int, int, juce::ComboBox&) override
+                       int, int, int, int, juce::ComboBox& box) override
     {
+        if (plate && box.getComponentID() == "hit") return;
+
         const float cx = (float) width - 12.0f;
         const float cy = (float) height * 0.5f;
         juce::Path arrow;
@@ -198,13 +223,17 @@ public:
     {
         label.setBounds (0, 0, box.getWidth() - 18, box.getHeight());
         label.setFont (getComboBoxFont (box));
-        label.setColour (juce::Label::textColourId, theme::accent);
+        const bool hidden = plate && box.getComponentID() == "hit";
+        label.setColour (juce::Label::textColourId,
+                         hidden ? juce::Colours::transparentBlack : theme::accent);
     }
 
     //==========================================================================
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& b,
                            bool highlighted, bool /*down*/) override
     {
+        if (plate && b.getComponentID() == "hit") return;
+
         auto r = b.getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
         const bool on = b.getToggleState();
@@ -222,9 +251,18 @@ public:
     void drawButtonBackground (juce::Graphics& g, juce::Button& b,
                                const juce::Colour&, bool highlighted, bool /*down*/) override
     {
+        if (plate && b.getComponentID() == "hit") return;
+
         auto r = b.getLocalBounds().toFloat().reduced (1.5f);
         const float radius = juce::jmin (12.0f, r.getHeight() * 0.5f);
         paintPill (g, r, radius, b.getToggleState(), highlighted);
+    }
+
+    void drawButtonText (juce::Graphics& g, juce::TextButton& b,
+                         bool highlighted, bool down) override
+    {
+        if (plate && b.getComponentID() == "hit") return;
+        juce::LookAndFeel_V4::drawButtonText (g, b, highlighted, down);
     }
 
 private:

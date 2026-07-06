@@ -24,6 +24,10 @@ public:
         repaint();
     }
 
+    // Smoothed 0..1 meter position — read by the plate renderer, which reveals
+    // the baked lit tick arc up to this point instead of vector-drawing.
+    float getT() const noexcept { return juce::jlimit (0.0f, 1.0f, smoothed); }
+
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat().reduced (14.0f);

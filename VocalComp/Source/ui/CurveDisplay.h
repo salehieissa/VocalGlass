@@ -28,6 +28,11 @@ public:
         setMouseDragSensitivity (260);
     }
 
+    // Plate mode: the recessed smoked-glass face + etched grid are baked into
+    // the chassis, so paint only the dynamic overlay (curve, shade, dot,
+    // readouts) in colours tuned for the dark glass.
+    void setPlateMode (bool p) { plateMode = p; }
+
     void setGainReductionDb (float gr)
     {
         const float clamped = juce::jlimit (0.0f, 24.0f, gr);
@@ -64,9 +69,12 @@ public:
         auto bounds = getLocalBounds().toFloat();
         auto plot   = bounds.reduced (12.0f);
 
-        // recessed display face: the curve etches into a light, sunken panel
-        const float faceCorner = 12.0f;
-        theme::recess (g, bounds, faceCorner);
+        const float faceCorner = plateMode ? 18.0f : 12.0f;
+        if (! plateMode)
+        {
+            // recessed display face: the curve etches into a light, sunken panel
+            theme::recess (g, bounds, faceCorner);
+        }
 
         // clip everything to the rounded recessed face so nothing spills out
         juce::Path clip; clip.addRoundedRectangle (bounds, faceCorner);
@@ -89,13 +97,16 @@ public:
             return inDb + gr;
         };
 
-        // ---- grid ----
-        g.setColour (juce::Colours::white.withAlpha (0.5f));
-        static const std::array<float, 4> ticks { -48.0f, -36.0f, -24.0f, -12.0f };
-        for (auto db : ticks)
+        // ---- grid (baked into the plate's smoked glass in plate mode) ----
+        if (! plateMode)
         {
-            g.drawLine (X (db), plot.getY(), X (db), plot.getBottom(), 1.0f);
-            g.drawLine (plot.getX(), Y (db), plot.getRight(), Y (db), 1.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.5f));
+            static const std::array<float, 4> ticks { -48.0f, -36.0f, -24.0f, -12.0f };
+            for (auto db : ticks)
+            {
+                g.drawLine (X (db), plot.getY(), X (db), plot.getBottom(), 1.0f);
+                g.drawLine (plot.getX(), Y (db), plot.getRight(), Y (db), 1.0f);
+            }
         }
 
         // ---- unity (1:1) diagonal, dashed ----
@@ -104,7 +115,8 @@ public:
             unity.startNewSubPath (X (kDbMin), Y (kDbMin));
             unity.lineTo (X (kDbMax), Y (kDbMax));
             const float dashes[] = { 4.0f, 4.0f };
-            g.setColour (theme::inkSoft.withAlpha (0.45f));
+            g.setColour (plateMode ? juce::Colours::white.withAlpha (0.35f)
+                                   : theme::inkSoft.withAlpha (0.45f));
             juce::Path dashed;
             juce::PathStrokeType (1.0f).createDashedStroke (dashed, unity, dashes, 2);
             g.strokePath (dashed, juce::PathStrokeType (1.0f));
@@ -132,7 +144,8 @@ public:
         }
 
         // ---- threshold guide ----
-        g.setColour (theme::inkSoft.withAlpha (0.35f));
+        g.setColour (plateMode ? juce::Colours::white.withAlpha (0.22f)
+                               : theme::inkSoft.withAlpha (0.35f));
         g.drawLine (X (thresholdDb), plot.getY(), X (thresholdDb), plot.getBottom(), 1.0f);
 
         // ---- the curve (with a soft pink glow) ----
@@ -158,7 +171,7 @@ public:
         }
 
         // ---- ratio readout (top-left) ----
-        g.setColour (theme::ink);
+        g.setColour (plateMode ? juce::Colour (0xffd7d9de) : theme::ink);
         g.setFont (theme::font (22.0f, true));
         g.drawText (juce::String (ratio, 2) + " : 1",
                     juce::Rectangle<float> (plot.getX() + 6.0f, plot.getY() + 4.0f,
@@ -166,12 +179,12 @@ public:
                     juce::Justification::topLeft, false);
 
         // ---- gain-reduction readout (bottom-right) ----
-        g.setColour (theme::inkSoft);
+        g.setColour (plateMode ? juce::Colour (0xff9a9ca4) : theme::inkSoft);
         g.setFont (theme::font (12.0f, false));
         g.drawText ("GR", juce::Rectangle<float> (plot.getRight() - 96.0f, plot.getBottom() - 24.0f,
                                                   24.0f, 20.0f).toNearestInt(),
                     juce::Justification::centredRight, false);
-        g.setColour (theme::ink);
+        g.setColour (plateMode ? juce::Colour (0xffd7d9de) : theme::ink);
         g.setFont (theme::font (16.0f, true));
         g.drawText (juce::String (-grDb, 1) + " dB",
                     juce::Rectangle<float> (plot.getRight() - 70.0f, plot.getBottom() - 26.0f,
@@ -189,4 +202,5 @@ private:
     float thresholdDb = -28.0f;
     float inputDb     = kDbMin;
     float kneeDb      = 6.0f;   // ARC default; updated per mode from the editor
+    bool  plateMode   = false;
 };

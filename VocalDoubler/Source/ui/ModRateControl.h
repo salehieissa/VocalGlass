@@ -16,10 +16,16 @@ class DivisionPill : public juce::Button
 public:
     DivisionPill() : juce::Button ("division") {}
 
+    bool plate = false;   // baked into the chassis; the editor draws the text
+
     void setText (const juce::String& t) { if (t != text) { text = t; repaint(); } }
+
+    const juce::String& getText() const { return text; }
 
     void paintButton (juce::Graphics& g, bool highlighted, bool /*down*/) override
     {
+        if (plate) return;
+
         auto r = getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
         const bool en = isEnabled();
@@ -77,6 +83,17 @@ public:
         addAndMakeVisible (divBtn);
     }
 
+    // Plate mode: the MOD RATE caption, pill bodies and stepper chevrons are
+    // baked into the chassis. Children become invisible hit areas placed at
+    // the measured art positions (fractions of this component's bounds); the
+    // live value + division texts are drawn by the editor.
+    bool plate = false;
+
+    juce::String readoutText() const
+    {
+        return synced ? division : juce::String (rateHz, 2) + " Hz";
+    }
+
     // Update the value displayed in the caption row.
     void setReadout (bool syncedOn, float hz, juce::String divText)
     {
@@ -88,6 +105,8 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        if (plate) return;
+
         theme::spacedText (g, "MOD RATE", capArea.toFloat(), theme::inkSoft,
                            11.0f, 2.2f, true, juce::Justification::centredLeft);
 
@@ -100,6 +119,21 @@ public:
 
     void resized() override
     {
+        if (plate)
+        {
+            // measured on the plates; component covers img x[1540,2000] y[905,1075]
+            auto f = [this] (float fx0, float fy0, float fx1, float fy1)
+            {
+                const float w = (float) getWidth(), h = (float) getHeight();
+                return juce::Rectangle<float> (fx0 * w, fy0 * h,
+                                               (fx1 - fx0) * w, (fy1 - fy0) * h).toNearestInt();
+            };
+            rateKnob.setBounds (f (0.0509f, 0.3518f, 0.1987f, 0.7518f));   // dome square
+            syncBtn.setBounds  (f (0.3609f, 0.0471f, 0.8674f, 0.4471f));
+            divBtn.setBounds   (f (0.3630f, 0.5588f, 0.8652f, 0.9412f));
+            return;
+        }
+
         auto r = getLocalBounds();
         capArea = r.removeFromTop (20);
         r.removeFromTop (6);

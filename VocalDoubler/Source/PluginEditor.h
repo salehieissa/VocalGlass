@@ -29,6 +29,19 @@ private:
     void showMenu();
     void showTips();
 
+    // ---- baked-plate (photoreal skin) mode ----
+    void setupPlateMode();
+    void paintPlate (juce::Graphics&);
+    void layoutPlate();
+    juce::Rectangle<int> plateFracRect (float fx0, float fy0, float fx1, float fy1) const;
+    void maskFromOn (juce::Graphics&, juce::Rectangle<int> screenRect);
+    void maskFromOnFeathered (juce::Graphics&, juce::Rectangle<int> screenRect, int featherPx);
+    void drawRingWedge (juce::Graphics&, juce::Slider&, float cxFrac, float cyFrac,
+                        float domeRFrac, float solidRFrac, float maxRFrac);
+
+    juce::Image chassisImg, chassisOnImg;
+    bool plateBaked = false;
+
     VocalDoublerProcessor& proc;
     KnobLookAndFeel laf;
 

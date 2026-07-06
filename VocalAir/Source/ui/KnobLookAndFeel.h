@@ -11,6 +11,10 @@
 class KnobLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    // Baked-plate mode: components whose visuals live on the chassis PNG set
+    // componentID "hit" and draw nothing; the combo box goes transparent.
+    bool plate = false;
+
     KnobLookAndFeel()
     {
        #if VG_HAS_BUNDLED_FONT
@@ -210,9 +214,17 @@ public:
     void drawButtonBackground (juce::Graphics& g, juce::Button& b,
                                const juce::Colour&, bool highlighted, bool /*down*/) override
     {
+        if (plate && b.getComponentID() == "hit") return;
         auto r = b.getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
         paintPill (g, r, radius, b.getToggleState(), highlighted);
+    }
+
+    void drawButtonText (juce::Graphics& g, juce::TextButton& b,
+                         bool highlighted, bool down) override
+    {
+        if (plate && b.getComponentID() == "hit") return;
+        LookAndFeel_V4::drawButtonText (g, b, highlighted, down);
     }
 
     //==========================================================================
@@ -220,6 +232,7 @@ public:
     void drawComboBox (juce::Graphics& g, int width, int height, bool,
                        int, int, int, int, juce::ComboBox& box) override
     {
+        if (plate) return;   // capsule + chevron are baked into the chassis
         auto r = juce::Rectangle<float> (0, 0, (float) width, (float) height).reduced (1.0f);
         const float radius = 9.0f;
         g.setColour (juce::Colours::white);
@@ -242,7 +255,10 @@ public:
     {
         label.setBounds (12, 0, box.getWidth() - 30, box.getHeight());
         label.setFont (getComboBoxFont (box));
-        label.setJustificationType (juce::Justification::centredLeft);
+        label.setJustificationType (plate ? juce::Justification::centred
+                                          : juce::Justification::centredLeft);
+        if (plate)
+            label.setColour (juce::Label::textColourId, theme::ink);
     }
 
 private:

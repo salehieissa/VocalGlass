@@ -17,8 +17,26 @@ public:
         startTimerHz (30);
     }
 
+    // Plate mode: grooves/ruler/labels are baked into the chassis. The
+    // component's bounds must exactly cover imgRect of the plate canvas; the
+    // level fills are revealed by blitting the fully-lit bars from the ON
+    // plate, clipped to the level height.
+    void setPlate (juce::Image on, juce::Rectangle<float> imgRectIn,
+                   juce::Rectangle<float> barLIn, juce::Rectangle<float> barRIn)
+    {
+        plate = true;
+        onImg = std::move (on);
+        imgRect = imgRectIn; barLImg = barLIn; barRImg = barRIn;
+    }
+
     void paint (juce::Graphics& g) override
     {
+        if (plate && onImg.isValid())
+        {
+            paintPlateBars (g);
+            return;
+        }
+
         auto r = getLocalBounds().toFloat();
 
         // scale numbers down the centre
@@ -56,6 +74,41 @@ public:
     }
 
 private:
+    void paintPlateBars (juce::Graphics& g)
+    {
+        auto toLocal = [this] (juce::Rectangle<float> r)
+        {
+            const float sx = (float) getWidth()  / imgRect.getWidth();
+            const float sy = (float) getHeight() / imgRect.getHeight();
+            return juce::Rectangle<float> ((r.getX() - imgRect.getX()) * sx,
+                                           (r.getY() - imgRect.getY()) * sy,
+                                           r.getWidth() * sx, r.getHeight() * sy);
+        };
+
+        auto drawFill = [&] (juce::Rectangle<float> barImg, float prop)
+        {
+            if (prop <= 0.002f) return;
+            auto local = toLocal (barImg);
+            auto fill = local.withTop (local.getBottom() - prop * local.getHeight());
+
+            juce::Path clip;
+            clip.addRoundedRectangle (local, local.getWidth() * 0.5f);
+            g.saveState();
+            g.reduceClipRegion (clip);
+            g.reduceClipRegion (fill.toNearestInt());
+            const auto src = barImg.withTop (barImg.getBottom() - prop * barImg.getHeight());
+            g.drawImage (onImg,
+                         juce::roundToInt (fill.getX()), juce::roundToInt (fill.getY()),
+                         juce::roundToInt (fill.getWidth()), juce::roundToInt (fill.getHeight()),
+                         juce::roundToInt (src.getX()), juce::roundToInt (src.getY()),
+                         juce::roundToInt (src.getWidth()), juce::roundToInt (src.getHeight()));
+            g.restoreState();
+        };
+
+        drawFill (barLImg, dispL);
+        drawFill (barRImg, dispR);
+    }
+
     void drawBar (juce::Graphics& g, juce::Rectangle<float> bar, float prop)
     {
         const float corner = bar.getWidth() * 0.5f;
@@ -106,4 +159,8 @@ private:
     std::atomic<float>& srcL;
     std::atomic<float>& srcR;
     float dispL = 0.0f, dispR = 0.0f;
+
+    bool plate = false;
+    juce::Image onImg;
+    juce::Rectangle<float> imgRect, barLImg, barRImg;
 };

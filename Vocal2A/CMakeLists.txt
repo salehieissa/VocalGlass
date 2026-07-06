@@ -57,6 +57,40 @@ target_link_libraries(Vocal2A
         juce::juce_recommended_warning_flags
 )
 
+# --- optional photoreal UI skin (assets/ui) ---
+# Embed whichever candidate assets actually exist; missing ones are skipped and
+# the code falls back to vector drawing for those pieces.
+set(VG_SKIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets/ui")
+set(VG_SKIN_CANDIDATES
+    "2a-vu-face@2x.png" "2a-vu-needle@2x.png"
+    "knob@2x.png" "knob-large@2x.png" "knob-small@2x.png"
+    "ring-glow@2x.png" "ring-glow-large@2x.png" "ring-glow-small@2x.png"
+    "ring-off@2x.png" "ring-off-large@2x.png" "ring-off-small@2x.png"
+    "ring-on@2x.png" "ring-on-large@2x.png" "ring-on-small@2x.png"
+    "2a-chassis@2x.png" "2a-chassis-on@2x.png"
+    "panel@2x.png"
+    "faceplate@2x.png" "screw@2x.png" "nameplate@2x.png"
+    "toggle-off@2x.png" "toggle-on@2x.png"
+    "bat-off@2x.png" "bat-on@2x.png"
+    "led-off@2x.png" "led-on@2x.png"
+    "led-red-off@2x.png" "led-red-on@2x.png"
+    "seg-off@2x.png" "seg-on@2x.png"
+    "screen@2x.png" "texture@2x.png")
+set(VG_SKIN_SOURCES "")
+foreach(name ${VG_SKIN_CANDIDATES})
+    if(EXISTS "${VG_SKIN_DIR}/${name}")
+        list(APPEND VG_SKIN_SOURCES "${VG_SKIN_DIR}/${name}")
+    endif()
+endforeach()
+if(VG_SKIN_SOURCES)
+    juce_add_binary_data(Vocal2ASkin
+        NAMESPACE   SkinBinary
+        HEADER_NAME SkinBinary.h
+        SOURCES     ${VG_SKIN_SOURCES})
+    target_link_libraries(Vocal2A PRIVATE Vocal2ASkin)
+    target_compile_definitions(Vocal2A PUBLIC VG_HAS_SKIN=1)
+endif()
+
 # --- optional bundled UI font (drop SFProDisplay.ttf into <repo>/fonts/) ---
 set(VG_FONTS_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/../fonts")
 set(VG_FONT_REG   "${VG_FONTS_DIR}/SFProDisplay.ttf")

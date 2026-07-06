@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Theme.h"
+#include "../../../common/ui/Skin.h"
 #include <cmath>
 
 //==============================================================================
@@ -9,12 +10,25 @@
 // glowing accent value ring (no dots), recessed slider grooves with white dome
 // thumbs, and clean white pills that fill with an accent gradient when active.
 // Matches the shared "vocal" family look (GritLookAndFeel).
+//
+// Plate mode (baked chassis present): rotary sliders paint only a rotated
+// steel dome sprite; linear sliders paint only the stud thumb (track + fill
+// live on the plates); components tagged "hit" become invisible hit areas.
 //==============================================================================
 class KnobLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    bool plate = false;
+
     KnobLookAndFeel()
     {
+        // Sprite canvases match a chassis canvas, so the dome is a small
+        // off-centre region — crop to a dome-centred square so rotation can
+        // pivot about (0.5, 0.5). Fractions measured from hard alpha.
+        knobSmallImg = skin::cropToDome (skin::image ("grit-knob-small@2x.png"),
+                                         0.4993f, 0.4648f, 0.615f);
+        thumbImg     = skin::cropToDome (skin::image ("slider-thumb@2x.png"),
+                                         0.4994f, 0.4989f, 0.626f);
        #if VG_HAS_BUNDLED_FONT
         setDefaultSansSerifTypeface (theme::bundledTypeface (false));
        #else
@@ -72,6 +86,9 @@ public:
     void drawComboBox (juce::Graphics& g, int width, int height, bool,
                        int, int, int, int, juce::ComboBox& box) override
     {
+        if (plate)
+            return;   // the capsule + chevron are baked into the plate
+
         auto r = juce::Rectangle<float> (0, 0, (float) width, (float) height).reduced (1.0f);
         const float radius = 9.0f;
         g.setColour (juce::Colours::white);
@@ -92,6 +109,14 @@ public:
 
     void positionComboBoxText (juce::ComboBox& box, juce::Label& label) override
     {
+        if (plate)
+        {
+            // leave room for the baked chevron on the right of the capsule
+            label.setBounds (18, 0, box.getWidth() - 52, box.getHeight());
+            label.setFont (getComboBoxFont (box));
+            label.setJustificationType (juce::Justification::centredLeft);
+            return;
+        }
         label.setBounds (12, 0, box.getWidth() - 30, box.getHeight());
         label.setFont (getComboBoxFont (box));
         label.setJustificationType (juce::Justification::centredLeft);
@@ -104,6 +129,19 @@ public:
                            float pos, float startAngle, float endAngle,
                            juce::Slider& s) override
     {
+        if (plate && knobSmallImg.isValid())
+        {
+            // dome sprite only — seat + neon ring live on the baked plates
+            const float angle = startAngle + pos * (endAngle - startAngle);
+            const float scale = (float) s.getProperties().getWithDefault ("domeScale", 1.0);
+            const float side  = (float) juce::jmin (width, height) * scale;
+            const juce::Rectangle<float> dest ((float) x + ((float) width  - side) * 0.5f,
+                                               (float) y + ((float) height - side) * 0.5f,
+                                               side, side);
+            skin::drawKnobRotated (g, knobSmallImg, dest, angle);
+            return;
+        }
+
         auto bounds = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height)
                           .reduced (5.0f);
         const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f - 2.0f;
@@ -210,6 +248,17 @@ public:
             return;
         }
 
+        if (plate && thumbImg.isValid())
+        {
+            // stud thumb only — the recessed track is baked into the plate and
+            // the pink fill is masked from the ON plate by the editor
+            const float dia = (float) (horizontal ? height : width);
+            const float cx = horizontal ? sliderPos : (float) x + (float) width * 0.5f;
+            const float cy = horizontal ? (float) y + (float) height * 0.5f : sliderPos;
+            skin::drawInRect (g, thumbImg, { cx - dia * 0.5f, cy - dia * 0.5f, dia, dia });
+            return;
+        }
+
         const float trackThick = horizontal ? 9.0f : 11.0f;
         const float thumbR     = horizontal ? 10.0f : 12.0f;
 
@@ -242,6 +291,7 @@ public:
     void drawButtonBackground (juce::Graphics& g, juce::Button& b,
                                const juce::Colour&, bool highlighted, bool /*down*/) override
     {
+        if (plate && b.getComponentID() == "hit") return;   // invisible hit area
         auto r = b.getLocalBounds().toFloat().reduced (1.5f);
         const float radius = r.getHeight() * 0.5f;
         paintPill (g, r, radius, b.getToggleState(), highlighted);
@@ -249,6 +299,7 @@ public:
 
     void drawButtonText (juce::Graphics& g, juce::TextButton& b, bool, bool) override
     {
+        if (plate && b.getComponentID() == "hit") return;
         const bool on = b.getToggleState();
         g.setColour (on ? juce::Colours::white : theme::ink);
         g.setFont (theme::font (15.0f, false));
@@ -270,6 +321,8 @@ public:
     }
 
 private:
+    juce::Image knobSmallImg, thumbImg;
+
     //==========================================================================
     static void paintAccentFill (juce::Graphics& g, juce::Rectangle<float> r, float radius)
     {

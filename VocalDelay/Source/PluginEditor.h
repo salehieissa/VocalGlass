@@ -10,6 +10,7 @@
 #include "ui/DisplayCard.h"
 #include "ui/TapButton.h"
 #include "ui/LinkButton.h"
+#include "../../common/ui/Skin.h"
 #include "../../common/Licensing/ActivationOverlay.h"
 #include <array>
 #include <vector>
@@ -32,6 +33,16 @@ private:
     void timerCallback() override;
     void setChoiceParam (const char* id, int value);
     void registerTap();
+
+    // ---- baked-plate rendering ----
+    void setupPlateMode();
+    void paintPlate (juce::Graphics&);
+    void layoutPlate();
+    juce::Rectangle<int> plateFracRect (float fx0, float fy0, float fx1, float fy1) const;
+    void maskFromOn (juce::Graphics&, juce::Rectangle<int> screenRect);
+    void maskFromOnFeathered (juce::Graphics&, juce::Rectangle<int> screenRect, int featherPx);
+    void drawRingWedge (juce::Graphics&, juce::Slider&, float cxFrac, float cyFrac,
+                        float domeRFrac, float solidRFrac, float maxRFrac);
 
     VocalDelayProcessor& proc;
     KnobLookAndFeel laf;
@@ -77,6 +88,10 @@ private:
 
     // tap-tempo state
     std::vector<double> tapTimes;
+
+    // baked-plate skin
+    juce::Image chassisImg, chassisOnImg;
+    bool plateBaked = false;
 
     // Full-editor "enter your license key" overlay (shown until activated).
     ActivationOverlay licenseOverlay { proc.license, "VocalDelay", "https://vocalessential.com",

@@ -7,6 +7,7 @@
 #include "ui/KnobLookAndFeel.h"
 #include "ui/MeterBar.h"
 #include "ui/CurveDisplay.h"
+#include "../../common/ui/Skin.h"
 #include "../../common/Licensing/ActivationOverlay.h"
 #include <array>
 #include <memory>
@@ -69,6 +70,17 @@ private:
 
     // layout rects painted in paint()
     juce::Rectangle<int> mainCard, curveCard, modeContainer, bottomStrip;
+
+    // ---- baked photoreal plate ----
+    juce::Image chassisImg, chassisOnImg;
+    float inLDb = -60.0f, inRDb = -60.0f, outLDb = -60.0f, outRDb = -60.0f;
+
+    juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const;
+    void maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect);
+    void maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<int> screenRect, int featherPx);
+    void drawRingWedge (juce::Graphics& g, juce::Slider& s, float cxFrac, float cyFrac,
+                        float domeRFrac, float solidRFrac, float maxRFrac);
+    void paintPlate (juce::Graphics& g);
 
     // Full-editor "enter your license key" overlay (shown until activated).
     ActivationOverlay licenseOverlay { proc.license, "VocalComp", "https://vocalessential.com",
