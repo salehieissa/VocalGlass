@@ -76,19 +76,29 @@ All paths repo-relative; everything is platform-independent, ready to upload.
   `KEYGEN_ADMIN_TOKEN=… node scripts/test-keygen.mjs` — mints + validates a
   license per policy.
 
-## 4. Deliverable artifacts
+## 4. Deliverable artifacts — CLEAN REBUILD Jul 7 2026 (all pkgs fresh)
 
-- **Installers** (Developer ID-signed, notarized, stapled): `dist/`
-  - Per plugin: `dist/<Name>-1.0.0.pkg` — ship the 16 non-rack pkgs.
-  - Suite: `dist/VocalEssential-Suite-1.0.0.pkg`. **Note**: the current suite
-    pkg was built when VocalRack was still in the lineup — rebuild it without
-    rack before launch (`scripts/sign_and_notarize.sh` then
-    `scripts/build_installer.sh` with VocalRack removed from the `PLUGINS`
-    list; needs the Developer ID certs + notary keychain profile), or ship it
-    as-is knowing it installs one extra unsupported plugin.
-  - Each pkg installs VST3 → `/Library/Audio/Plug-Ins/VST3`, AU →
-    `/Library/Audio/Plug-Ins/Components`, Standalone → `/Applications`.
-  - Verified Jul 7 2026: pkgs pass `stapler validate` + `spctl --assess`.
+Every binary and pkg was rebuilt from scratch on Jul 7 2026 (machine cleaned
+first — old bundles uninstalled, VocalRack remnants purged). **Every previous
+pkg you have attached in Shopify Digital Downloads is stale; replace all of
+them with this set.**
+
+- **17 pkgs in `dist/`** (Developer ID-signed, notarized ticket **stapled**,
+  all pass `codesign --verify --deep --strict`, `stapler validate`, and
+  `spctl --assess --type install` → "accepted / Notarized Developer ID"):
+  - 16 × `dist/<Name>-1.0.0.pkg` — one per plugin.
+  - `dist/VocalEssential-Suite-1.0.0.pkg` — all 16, **no VocalRack**
+    (payload verified rack-free).
+- **Swap map for Digital Downloads**: 11 replacements (Vocal2A, VocalAir,
+  VocalComp, VocalDelay, VocalDoubler, VocalEss, VocalGrit, VocalKnob,
+  VocalQ, VocalTune, VocalVerb) + 5 new attachments (VocalMod, VocalBlend,
+  VocalChop, VocalClip, VocalGate) + the Suite replacement. Delete any
+  `VocalRack-1.0.0.pkg` attachment — it no longer exists.
+- **Manifest**: `dist/manifest-1.0.0.json` — filename, plugin id, version,
+  bytes, sha256, and notarization status for all 17 pkgs. Use the sha256 to
+  confirm the file you attach is the fresh one.
+- Each pkg installs VST3 → `/Library/Audio/Plug-Ins/VST3`, AU →
+  `/Library/Audio/Plug-Ins/Components`, Standalone → `/Applications`.
 - **Windows**: `HANDOFF-WINDOWS.md` (16 plugins, same layout mirrored to
   Inno Setup installers).
 

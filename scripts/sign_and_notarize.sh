@@ -37,7 +37,7 @@ AU_DIR="$HOME/Library/Audio/Plug-Ins/Components"
 PLUGINS=(
     VocalGrit VocalEss VocalQ VocalKnob VocalAir VocalComp
     Vocal2A VocalTune VocalVerb VocalDoubler VocalDelay
-    VocalGate VocalMod VocalBlend VocalChop VocalClip VocalRack
+    VocalGate VocalMod VocalBlend VocalChop VocalClip
 )
 
 DEV_ID_APP="${DEV_ID_APP:-}"
