@@ -83,6 +83,10 @@ first — old bundles uninstalled, VocalRack remnants purged). **Every previous
 pkg you have attached in Shopify Digital Downloads is stale; replace all of
 them with this set.**
 
+- **UPLOAD THESE → `dist-zip/<Name>-1.0.0-mac-win.zip`** (17 zips, one per
+  product): each contains the notarized macOS `.pkg`, the Windows `.msi`, and
+  a README-install.txt. Attach ONE zip per product in Digital Downloads —
+  customers get both platforms in a single download.
 - **17 pkgs in `dist/`** (Developer ID-signed, notarized ticket **stapled**,
   all pass `codesign --verify --deep --strict`, `stapler validate`, and
   `spctl --assess --type install` → "accepted / Notarized Developer ID"):
