@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<PARAMS>
+  <PARAM id="gateOn" value="1.0"/>
+  <PARAM id="essOn" value="1.0"/>
+  <PARAM id="eqOn" value="1.0"/>
+  <PARAM id="compOn" value="1.0"/>
+  <PARAM id="heatOn" value="1.0"/>
+  <PARAM id="airOn" value="1.0"/>
+  <PARAM id="dlyOn" value="1.0"/>
+  <PARAM id="verbOn" value="1.0"/>
+  <PARAM id="clipOn" value="1.0"/>
+  <PARAM id="gateThresh" value="-48.0"/>
+  <PARAM id="gateRelease" value="120.0"/>
+  <PARAM id="essAmount" value="50.0"/>
+  <PARAM id="essFreq" value="6800.0"/>
+  <PARAM id="eqHpf" value="95.0"/>
+  <PARAM id="eqMud" value="-3.5"/>
+  <PARAM id="eqPresence" value="2.0"/>
+  <PARAM id="eqAir" value="2.5"/>
+  <PARAM id="compAmount" value="40.0"/>
+  <PARAM id="heatDrive" value="30.0"/>
+  <PARAM id="heatTone" value="-30.0"/>
+  <PARAM id="airAmount" value="40.0"/>
+  <PARAM id="dlySend" value="10.0"/>
+  <PARAM id="dlyTime" value="280.0"/>
+  <PARAM id="dlyFeedback" value="30.0"/>
+  <PARAM id="verbSend" value="30.0"/>
+  <PARAM id="verbSize" value="60.0"/>
+  <PARAM id="clipAmount" value="25.0"/>
+  <PARAM id="outGain" value="0.0"/>
+</PARAMS>

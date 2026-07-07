@@ -1,29 +1,63 @@
 # VocalEssential — Windows Build & Release Handoff
 
-Everything a Windows engineer (or CI runner) needs to ship the 15-plugin suite
-on Windows. The codebase is already cross-platform JUCE 8 / CMake; nothing in
-the DSP or UI is macOS-specific. macOS-only pieces (AU format, universal-binary
-flag, notarization) are guarded and simply don't apply on Windows.
+You already know the suite — this is the **update handoff**. The catalog is now
+**16 plugins**; the update started with the photoreal UI rework, and five
+plugins are new since your last sync. The codebase is cross-platform JUCE 8 /
+CMake; nothing in the DSP or UI is macOS-specific (AU, universal-binary flag,
+notarization are guarded off on Windows).
 
-## The suite (15 plugins)
+## UPDATES — Jul 7 2026 (read this first)
+
+1. **New plugins (5)**: VocalMod (`Vmod`), VocalBlend (`Vbld`), VocalChop
+   (`Vchp`), VocalClip (`Vclp`), VocalGate (`Vgat`). Same per-folder CMake
+   pattern as the rest; they're in the build lists below.
+2. **UI rework (everything)**: every plugin now renders a photoreal
+   white-glass/chrome/pink-neon plate (crop-to-chrome, edge-to-edge). Skin
+   PNGs live in `assets/ui/` and are embedded by each plugin's CMakeLists
+   (`VG_SKIN_CANDIDATES` → `juce_add_binary_data`) — nothing to install at
+   runtime, but **pull latest before building** so the embedded art is current.
+3. **VocalRack is TOSSED** — it may still exist in the repo, but do **not**
+   build, package, or ship it. It is not part of the 16-plugin catalog.
+4. **Images — what's already made vs. what Windows must produce**:
+   - All store/marketing images are platform-independent and already rendered:
+     `marketing/renders/` (`<plugin>-float@2x.png` dark cinematic floating
+     render + `<plugin>-hero@2x.png` clean hero, per plugin), the Apple-style
+     white ad set in `marketing/renders/ads/` (`<plugin>-product.png` per
+     plugin, extra hero shots for the hero plugins VocalTune / VocalGrit /
+     VocalChop, and `suite-product-*.png`). **Reuse these — do not re-render
+     on Windows.**
+   - To regenerate any render at higher quality: per-asset prompts in
+     `marketing/HIGGSFIELD-PROMPTS.md` (base style block + per-plugin subject
+     line; feed the matching `screenshots/clean/<Name>.png` as the reference
+     image).
+   - What Windows DOES need to capture: **one clean UI screenshot per plugin
+     standalone on Windows** — for QA parity against `screenshots/clean/` and
+     any "runs on Windows" proof. Launch each standalone, dismiss the
+     audio-settings banner, capture the plugin window only (Win+Shift+S, or a
+     window-handle capture in CI), 100% DPI scaling, save as
+     `screenshots/windows/<Name>.png`. Layouts should match the macOS shots
+     pixel-for-pixel (the UI is a scaled bitmap plate).
+
+## The suite (16 plugins)
 
 | Plugin | Code | What it is |
 |---|---|---|
-| VocalGrit | `Vgrt` | saturation / texture |
+| VocalGrit | `Vgrt` | saturation / texture — **hero plugin** |
 | VocalEss | `Vess` | de-esser |
 | VocalQ | `Vqeq` | dynamic vocal EQ |
 | VocalKnob | `Vknb` | one-knob vocal enhancer |
 | VocalAir | `Vair` | air / presence exciter |
 | VocalComp | `Vcmp` | vocal compressor |
 | Vocal2A | `V2al` | opto leveler (LA-2A style) |
-| VocalTune | `Vtun` | pitch correction |
+| VocalTune | `Vtun` | pitch correction — **hero plugin** |
 | VocalVerb | `Vrvb` | vocal reverb |
 | VocalDoubler | `Vdbl` | doubler |
 | VocalDelay | `Vdly` | delay |
-| VocalGate | `Vgat` | gate |
-| VocalMod | `Vmod` | chorus / flanger / phaser |
-| VocalBlend | `Vbld` | master-bus vocal/beat glue |
-| VocalChop | `Vchp` | tempo-synced chopper |
+| VocalGate | `Vgat` | gate — **new** |
+| VocalMod | `Vmod` | chorus / flanger / phaser — **new** |
+| VocalBlend | `Vbld` | master-bus vocal/beat glue — **new** |
+| VocalChop | `Vchp` | tempo-synced chopper — **new, hero plugin** |
+| VocalClip | `Vclp` | soft clipper (3 shapes, 4x OS, live transfer curve) — **new** |
 
 All share `PLUGIN_MANUFACTURER_CODE Vgls`, company "VocalEssential".
 
@@ -35,8 +69,7 @@ All share `PLUGIN_MANUFACTURER_CODE Vgls`, company "VocalEssential".
 - **Git** (JUCE 8.0.4 is pulled automatically via `FetchContent` on first
   configure — needs network access once; it's cached in each build dir after).
 - No other dependencies. UI skin PNGs under `assets/ui/` are embedded into the
-  binaries by CMake (`juce_add_binary_data` via each plugin's
-  `VG_SKIN_CANDIDATES` list) — nothing to install or copy at runtime.
+  binaries by CMake — nothing to install or copy at runtime.
 
 ## Build (per plugin)
 
@@ -45,7 +78,7 @@ CMakeLists). Formats on Windows: **VST3 + Standalone** (AU is macOS-only and
 is skipped automatically by JUCE).
 
 ```bat
-:: from the repo root, for each of the 15 plugin folders:
+:: from the repo root, for each of the 16 plugin folders:
 cmake -S Vocal2A -B Vocal2A\build-win -G "Visual Studio 17 2022" -A x64
 cmake --build Vocal2A\build-win --config Release
 ```
@@ -67,7 +100,7 @@ Batch-build everything (PowerShell):
 ```powershell
 $plugins = "VocalGrit","VocalEss","VocalQ","VocalKnob","VocalAir","VocalComp",
            "Vocal2A","VocalTune","VocalVerb","VocalDoubler","VocalDelay",
-           "VocalGate","VocalMod","VocalBlend","VocalChop"
+           "VocalGate","VocalMod","VocalBlend","VocalChop","VocalClip"
 foreach ($p in $plugins) {
   cmake -S $p -B "$p\build-win" -G "Visual Studio 17 2022" -A x64
   cmake --build "$p\build-win" --config Release
@@ -111,7 +144,7 @@ every Standalone `.exe`, then the installer itself.
 
 ## Installer
 
-Recommended: **Inno Setup 6** — one suite installer plus 15 singles, mirroring
+Recommended: **Inno Setup 6** — one suite installer plus 16 singles, mirroring
 the macOS `dist/` layout (`VocalEssential-Suite-1.0.0.pkg` ↔
 `VocalEssential-Suite-1.0.0.exe`).
 
@@ -133,14 +166,15 @@ Version all installers `1.0.0` to match the macOS release.
 
 ## QA checklist before shipping
 
-1. All 15 build clean in Release (no warnings-as-errors are enabled, but check
+1. All 16 build clean in Release (no warnings-as-errors are enabled, but check
    the log for anything alarming).
 2. Load each VST3 in a Windows DAW (FL Studio + Ableton minimum). Confirm:
    - UI renders the photoreal plate edge-to-edge (crop-to-chrome), no dark
-     slivers at any edge, knobs/domes centered in their grooves.
+     slivers at any edge, knobs/domes centered in their grooves, pink value
+     arcs track every knob.
    - Automation: move every knob from the DAW side, UI follows.
    - VocalChop/VocalDelay tempo-sync follow host BPM and restart on the grid.
-3. `pluginval` (Tracktion, free) at strictness 5+ on all 15 VST3s.
+3. `pluginval` (Tracktion, free) at strictness 5+ on all 16 VST3s.
 4. Activation overlay + license flow on at least 2 plugins (one single, one
    suite key).
 5. HiDPI: check 100% / 150% / 200% scaling — the UI is a scaled bitmap plate,
@@ -148,6 +182,7 @@ Version all installers `1.0.0` to match the macOS release.
 
 ## Deliverables back
 
-- `VocalEssential-Suite-1.0.0.exe` + 15 single installers, all signed.
+- `VocalEssential-Suite-1.0.0.exe` + 16 single installers, all signed.
 - A short build log (which VS/SDK versions used).
 - pluginval reports (txt) per plugin.
+- `screenshots/windows/<Name>.png` per plugin (see UPDATES §4).
