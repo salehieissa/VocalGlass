@@ -74,23 +74,38 @@ private:
     juce::Rectangle<int> cardArea, vuCard, vuTitleArea, bottomStrip, analogPill, trayArea;
     juce::Rectangle<int> brandBounds, brandSubBounds, ledBounds, trayDivider;
 
-    // ---- baked-plate helpers (map opaque-plate fractions <-> screen) ----
-    juce::Rectangle<float> plateRect() const { return getLocalBounds().toFloat(); }
-    juce::Point<float>     plateXY (float fx, float fy) const
+    // ---- baked-plate helpers ----
+    // plategeo fractions are of the full plate canvas; the window shows only
+    // the plateCrop region, so all mapping goes through the crop.
+    juce::Point<float> plateXY (float fx, float fy) const
     {
-        auto p = plateRect();
-        return { p.getX() + fx * p.getWidth(), p.getY() + fy * p.getHeight() };
+        const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+        return { (fx * iw - (float) plateCrop.getX()) * (float) getWidth()  / (float) plateCrop.getWidth(),
+                 (fy * ih - (float) plateCrop.getY()) * (float) getHeight() / (float) plateCrop.getHeight() };
     }
-    juce::Rectangle<int>   plateFracRect (float fx, float fy, float fw, float fh) const
+    juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const
     {
-        auto p = plateRect();
-        return juce::Rectangle<float> (p.getX() + fx * p.getWidth(),
-                                       p.getY() + fy * p.getHeight(),
-                                       fw * p.getWidth(), fh * p.getHeight()).toNearestInt();
+        const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+        const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+        const float sy = (float) getHeight() / (float) plateCrop.getHeight();
+        return juce::Rectangle<float> ((fx * iw - (float) plateCrop.getX()) * sx,
+                                       (fy * ih - (float) plateCrop.getY()) * sy,
+                                       fw * iw * sx, fh * ih * sy).toNearestInt();
     }
     // Reveal the matching region of the lit plate over the base (pixel-aligned).
     void maskFromOn (juce::Graphics&, juce::Rectangle<int> screenRect);
-    void drawKnobHalo (juce::Graphics&, VintageKnob&, float ringRfracW, bool full = false);
+    void maskFromOnFeathered (juce::Graphics&, juce::Rectangle<int> screenRect, int featherPx);
+    void drawRingWedge (juce::Graphics&, juce::Slider&, float cxFrac, float cyFrac,
+                        float domeRFrac, float solidRFrac, float maxRFrac);
+
+    // crop-to-chrome + cached scaled plates (1:1 blits per frame)
+    juce::Rectangle<int> plateCrop;
+    juce::Image plateScaled, plateOnScaled;
+
+    // dirty-region repaint bookkeeping
+    std::array<double, 7> shownKnob {};
+    int shownVuSrc = -1, shownAnalog = -1;
+    bool shownAuto = false;
 
     // selector button rects (screen space), filled in resized()
     std::array<juce::Rectangle<int>, 3> vuBtnR, analogBtnR;

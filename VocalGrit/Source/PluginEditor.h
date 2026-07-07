@@ -119,6 +119,20 @@ private:
     juce::Label inDbLbl, outDbLbl;               // live dB readouts beside the meter bars
     float inSm = 0.0f, outSm = 0.0f;             // meter smoothing for the plate bars
 
+    // crop-to-chrome: the plate's bright bbox inside the generated canvas; the
+    // editor shows ONLY this region (backdrop never visible). Scaled copies are
+    // cached per resize so per-frame paints are 1:1 blits.
+    juce::Rectangle<int> plateCrop;
+    juce::Image plateScaled, plateOnScaled;
+
+    // dirty-region repaint bookkeeping (only repaint what changed each tick)
+    std::vector<double> shownPlateKnob;
+    int shownMode = -1;
+    std::array<bool, 4> shownPills {}, shownFxOn {};
+    bool shownSync = false;
+    std::array<double, 4> shownVs {};
+    double shownMix = -1.0e9, shownOut = -1.0e9;
+
     // A knob whose neon ring lives on the plate: slider + measured geometry
     // (fractions of the canvas; wedgeR = reveal radius incl. glow bleed).
     struct PlateKnob { juce::Slider* s; float cx, cy, wedgeR, domeR; };

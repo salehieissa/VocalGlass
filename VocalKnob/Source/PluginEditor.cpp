@@ -114,6 +114,8 @@ VocalKnobEditor::VocalKnobEditor (VocalKnobProcessor& p)
     // ------------------------------------------------------------------
     if (baked)
     {
+        plateCrop = skin::plateBounds (chassisImg);
+
         dial.setPlateMode (true);
 
         for (auto& b : modeBtns) { b.setButtonText (""); b.setComponentID ("hit"); }
@@ -130,7 +132,14 @@ VocalKnobEditor::VocalKnobEditor (VocalKnobProcessor& p)
     }
 
     startTimerHz (30);
-    setSize (baked ? 960 : 780, baked ? 638 : 640);
+    // plate mode: the window shows ONLY the plate (cropped at the chrome edge),
+    // and must match the crop's aspect exactly or the circular dome sprite sits
+    // in a vertically-stretched (elliptical) baked groove
+    if (baked)
+        setSize (960, juce::roundToInt (960.0f * (float) plateCrop.getHeight()
+                                               / (float) plateCrop.getWidth()));
+    else
+        setSize (780, 640);
 
     // License overlay sits on top of everything; it shows itself until activated.
     addChildComponent (licenseOverlay);
@@ -170,28 +179,55 @@ void VocalKnobEditor::timerCallback()
     presetName.setText (proc.getProgramName (proc.getCurrentProgram()), juce::dontSendNotification);
 
     if (chassisImg.isValid())
-        repaint();   // pill mask + ring wedge live in paintPlate
+    {
+        // dirty-region repaints: only invalidate what actually changed this tick
+        using namespace plategeo;
+
+        if (dial.getValue() != shownDial)
+        {
+            shownDial = dial.getValue();
+            // radius fractions are of image WIDTH; the vertical extent needs
+            // the aspect factor
+            const float ar = (float) chassisImg.getWidth() / (float) chassisImg.getHeight();
+            repaint (plateFracRect (dialCx - dialWedgeR, dialCy - dialWedgeR * ar,
+                                    dialWedgeR * 2.0f, dialWedgeR * 2.0f * ar).expanded (2));
+        }
+        if (mode != shownMode)
+        {
+            const int m = juce::jlimit (0, 3, mode);
+            if (shownMode >= 0)
+                repaint (plateFracRect (pillX[shownMode][0], pillY0,
+                                        pillX[shownMode][1] - pillX[shownMode][0],
+                                        pillY1 - pillY0).expanded (2));
+            shownMode = m;
+            repaint (plateFracRect (pillX[m][0], pillY0,
+                                    pillX[m][1] - pillX[m][0], pillY1 - pillY0).expanded (2));
+        }
+    }
 }
 
 //==============================================================================
+// plategeo fractions are of the FULL generated canvas; the window shows only
+// the plateCrop region, so map full-canvas fraction -> cropped screen px.
 juce::Rectangle<int> VocalKnobEditor::plateFracRect (float fx, float fy, float fw, float fh) const
 {
-    return juce::Rectangle<float> (fx * (float) getWidth(),  fy * (float) getHeight(),
-                                   fw * (float) getWidth(),  fh * (float) getHeight())
-               .toNearestInt();
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+    const float sy = (float) getHeight() / (float) plateCrop.getHeight();
+    return juce::Rectangle<float> ((fx * iw - (float) plateCrop.getX()) * sx,
+                                   (fy * ih - (float) plateCrop.getY()) * sy,
+                                   fw * iw * sx,
+                                   fh * ih * sy).toNearestInt();
 }
 
-// Blit the matching region of the lit plate over the base plate — pixel
-// registration is guaranteed because both images share the same canvas.
+// Blit the matching region of the lit plate over the base plate. Both scaled
+// caches share the editor's coordinate space, so this is a 1:1 copy — cheap,
+// and registration is exact by construction.
 void VocalKnobEditor::maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect)
 {
-    const float iw = (float) chassisOnImg.getWidth(), ih = (float) chassisOnImg.getHeight();
-    g.drawImage (chassisOnImg,
+    g.drawImage (plateOnScaled,
                  screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight(),
-                 juce::roundToInt (((float) screenRect.getX()      / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getY()      / (float) getHeight()) * ih),
-                 juce::roundToInt (((float) screenRect.getWidth()  / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getHeight() / (float) getHeight()) * ih));
+                 screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight());
 }
 
 // Same reveal but with a soft alpha ramp along the rect border, so the slight
@@ -228,19 +264,22 @@ void VocalKnobEditor::maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<in
 void VocalKnobEditor::drawDialWedge (juce::Graphics& g)
 {
     using namespace plategeo;
-    const float W = (float) getWidth();
-    const juce::Point<float> c (dialCx * W, dialCy * (float) getHeight());
-    const float R = dialWedgeR * W;
-    const float domeR = dialDomeDia * 0.5f * W;
+    // fractions are of the full canvas; convert through the crop mapping
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth() / (float) plateCrop.getWidth();
+    const juce::Point<float> c ((dialCx * iw - (float) plateCrop.getX()) * sx,
+                                (dialCy * ih - (float) plateCrop.getY())
+                                    * (float) getHeight() / (float) plateCrop.getHeight());
+    const float R      = dialWedgeR * iw * sx;
+    const float domeR  = dialDomeDia * 0.5f * iw * sx;
+    const float solidR = dialGlowSolidR * iw * sx;
 
     const float prop = juce::jlimit (0.0f, 1.0f,
                                      (float) dial.valueToProportionOfLength (dial.getValue()));
     const float a0 = juce::MathConstants<float>::pi;
-    const float a1 = a0 + prop * juce::MathConstants<float>::twoPi;
     const bool full = prop >= 0.995f;
     if (! full && prop <= 0.002f) return;
-
-    const float solidR = dialGlowSolidR * W;
+    const float a1 = a0 + prop * juce::MathConstants<float>::twoPi;
 
     const juce::Rectangle<int> box ((int) std::floor (c.x - R), (int) std::floor (c.y - R),
                                     (int) std::ceil (R * 2.0f), (int) std::ceil (R * 2.0f));
@@ -258,31 +297,37 @@ void VocalKnobEditor::drawDialWedge (juce::Graphics& g)
         g.restoreState();
     };
 
-    const float feather = full ? 0.0f : juce::jmin (0.22f, (a1 - a0) * 0.5f);
+    // both ends of the arc are feathered so there is never a hard radial cut:
+    // fIn fades the start (6 o'clock) in, fOut fades the leading edge out. At
+    // full value the ring is a seamless uninterrupted annulus.
+    const float span = a1 - a0;
+    const float fOut = full ? 0.0f : juce::jmin (0.22f, span * 0.40f);
+    const float fIn  = full ? 0.0f : juce::jmin (0.10f, span * 0.20f);
     const float aEnd = full ? a0 + juce::MathConstants<float>::twoPi : a1;
 
-    // solid core band (ring + tight bloom), angular feather on the leading edge
-    wedge (a0, aEnd - feather, domeR, solidR, 1.0f);
+    wedge (a0 + fIn, aEnd - fOut, domeR, solidR, 1.0f);
     constexpr int aSteps = 10;
     for (int i = 0; i < aSteps; ++i)
-        wedge (aEnd - feather * (1.0f - (float) i / aSteps),
-               aEnd - feather * (1.0f - (float) (i + 1) / aSteps),
-               domeR, solidR,
-               1.0f - ((float) i + 0.5f) / aSteps);
+    {
+        const float t0 = (float) i / aSteps, t1 = (float) (i + 1) / aSteps;
+        // leading edge fade-out
+        wedge (aEnd - fOut * (1.0f - t0), aEnd - fOut * (1.0f - t1),
+               domeR, solidR, 1.0f - (t0 + t1) * 0.5f);
+        // start edge fade-in
+        wedge (a0 + fIn * t0, a0 + fIn * t1,
+               domeR, solidR, (t0 + t1) * 0.5f);
+    }
 
-    // Outer bloom fades radially (never a circular cut) and eases in over the
-    // first stretch after 6 o'clock so the start edge is only crisp on the
-    // neon tube itself, not on the wide glow.
-    const float sf = full ? 0.0f : juce::jmin (0.14f, (a1 - a0) * 0.25f);
+    // outer bloom band, faded radially and softened at both angular ends
     constexpr int rSteps = 4;
     for (int i = 0; i < rSteps; ++i)
     {
         const float alpha = 0.85f * (1.0f - ((float) i + 0.5f) / rSteps);
         const float rIn  = solidR + (R - solidR) * (float) i / rSteps;
         const float rOut = solidR + (R - solidR) * (float) (i + 1) / rSteps;
-        wedge (a0 + sf, aEnd - feather * 0.5f, rIn, rOut, alpha);
-        wedge (a0,             a0 + sf * 0.5f, rIn, rOut, alpha * 0.33f);
-        wedge (a0 + sf * 0.5f, a0 + sf,        rIn, rOut, alpha * 0.66f);
+        wedge (a0 + fIn, aEnd - fOut * 0.5f, rIn, rOut, alpha);
+        wedge (a0,            a0 + fIn * 0.5f, rIn, rOut, alpha * 0.33f);
+        wedge (a0 + fIn * 0.5f, a0 + fIn,      rIn, rOut, alpha * 0.66f);
     }
 }
 
@@ -290,8 +335,7 @@ void VocalKnobEditor::paintPlate (juce::Graphics& g)
 {
     using namespace plategeo;
 
-    g.drawImage (chassisImg, getLocalBounds().toFloat(),
-                 juce::RectanglePlacement::stretchToFit);
+    g.drawImageAt (plateScaled, 0, 0);   // cached 1:1 blit — no per-frame rescale
 
     // active mode pill lights up (feathered so the plate tone drift is hidden)
     const int mode = juce::jlimit (0, 3, (int) proc.apvts.getRawParameterValue ("mode")->load());
@@ -372,13 +416,24 @@ void VocalKnobEditor::resized()
     if (chassisImg.isValid())
     {
         using namespace plategeo;
-        const float W = (float) getWidth();
+
+        // rebuild the scaled plate caches for the new size (1:1 blits per frame)
+        plateScaled   = skin::renderPlate (chassisImg,   plateCrop, getWidth(), getHeight());
+        plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop, getWidth(), getHeight());
+
+        // fractions are of the full canvas; map through the crop (size
+        // fractions are of the canvas WIDTH, so scale by iw * sx)
+        const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+        const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+        const float sy = (float) getHeight() / (float) plateCrop.getHeight();
 
         auto knobRect = [&] (float cx, float cy, float sideFracW)
         {
-            const int side = juce::roundToInt (sideFracW * W);
-            return juce::Rectangle<int> (juce::roundToInt (cx * W - side * 0.5f),
-                                         juce::roundToInt (cy * (float) getHeight() - side * 0.5f),
+            const int side = juce::roundToInt (sideFracW * iw * sx);
+            const float px = (cx * iw - (float) plateCrop.getX()) * sx;
+            const float py = (cy * ih - (float) plateCrop.getY()) * sy;
+            return juce::Rectangle<int> (juce::roundToInt (px - side * 0.5f),
+                                         juce::roundToInt (py - side * 0.5f),
                                          side, side);
         };
 

@@ -129,10 +129,16 @@ Vocal2AEditor::Vocal2AEditor (Vocal2AProcessor& p)
     trimAtt    = std::make_unique<SliderAtt> (proc.apvts, "trim", trimKnob);
 
     startTimerHz (30);
-    // Match the baked plate's opaque aspect (1213x764 -> 1.588:1) so the art
-    // maps 1:1 with no stretch; otherwise keep the legacy size.
-    if (chassisImg.isValid()) setSize (1024, 645);
-    else                      setSize (1024, 650);
+    // Crop-to-chrome: the window is exactly the plate's opaque region, so the
+    // hardware fills it edge-to-edge with no backdrop. Height follows the crop.
+    if (chassisImg.isValid())
+    {
+        plateCrop = skin::plateBounds (chassisImg);
+        setSize (1024, juce::roundToInt (1024.0f * (float) plateCrop.getHeight()
+                                                  / (float) plateCrop.getWidth()));
+    }
+    else
+        setSize (1024, 650);
 
     // License overlay sits on top of everything; it shows itself until activated.
     addChildComponent (licenseOverlay);
@@ -149,6 +155,53 @@ void Vocal2AEditor::setChoice (const juce::String& paramID, int index)
 {
     if (auto* param = proc.apvts.getParameter (paramID))
         param->setValueNotifyingHost (param->getNormalisableRange().convertTo0to1 ((float) index));
+}
+
+//==============================================================================
+// Measured geometry of the glass/chrome/neon plates (trimmed 2030x1336 canvas):
+// ON/OFF diff for pill bands, halo centres and the LED; radial pink profiles
+// for ring radii; OFF-plate luminance for seat grooves, toggles and text rows.
+namespace plategeo
+{
+    constexpr float PX = 2030.0f, PY = 1336.0f;
+    constexpr float px (float v) { return v / PX; }
+    constexpr float py (float v) { return v / PY; }
+
+    // big knobs (halo centres from the plate diff)
+    constexpr float gainCx = px (352.0f), peakCx = px (1658.0f), bigCy = py (546.0f);
+    constexpr float bigDomeR = px (160.0f), bigSolidR = px (200.0f), bigMaxR = px (232.0f);
+    constexpr float bigDomeBox = px (444.0f);   // dome = 0.765 of the sprite canvas
+
+    // small utility knobs
+    constexpr float smCx[5] = { px (750.5f), px (999.0f), px (1248.5f), px (1503.0f), px (1749.0f) };
+    constexpr float smCy = py (1102.0f);
+    constexpr float smallDomeR = px (54.0f), smallSolidR = px (92.0f), smallMaxR = px (112.0f);
+    constexpr float smallDomeBox = px (224.0f); // dome = 0.518 of the sprite canvas
+
+    // selector pill bands (edges are the measured seam valleys, seam-to-seam)
+    constexpr float vuX[4] = { px (1360.0f), px (1565.0f), px (1729.0f), px (1929.0f) };
+    constexpr float vuY0 = py (111.0f), vuY1 = py (210.0f);
+    constexpr float anX[4] = { px (116.0f), px (266.0f), px (426.0f), px (575.0f) };
+    constexpr float anY0 = py (1049.0f), anY1 = py (1155.0f);
+
+    // bat toggles sit in the measured caption gaps; LED jewel is baked
+    constexpr float modeCx = px (362.0f), autoCx = px (1715.0f), togCy = py (843.0f);
+    constexpr float togW = px (140.0f), togH = px (80.0f);
+    constexpr float ledX0 = px (1783.0f), ledX1 = px (1839.0f);
+    constexpr float ledY0 = py (828.0f),  ledY1 = py (884.0f);
+
+    // VU meter face interior + the always-on pink under-glow strip at its foot
+    constexpr float vuFX0 = px (690.0f), vuFX1 = px (1330.0f);
+    constexpr float vuFY0 = py (395.0f), vuFY1 = py (782.0f);
+    constexpr float stripX0 = px (705.0f), stripX1 = px (1320.0f);
+    constexpr float stripY0 = py (758.0f), stripY1 = py (792.0f);
+    // needle pivot = centre of the circle fitted through the printed numbers
+    constexpr float vuPivotX = px (1013.7f), vuPivotY = py (993.5f);
+    constexpr float vuTipLen = px (523.0f);
+
+    // live readouts (clean glass: above the big knobs, under the small ones)
+    constexpr float bigValW = px (200.0f), bigValY0 = py (222.0f), bigValY1 = py (288.0f);
+    constexpr float smValW  = px (170.0f), smValY0  = py (1188.0f), smValY1 = py (1238.0f);
 }
 
 //==============================================================================
@@ -204,13 +257,60 @@ void Vocal2AEditor::timerCallback()
 
     vu.setLevel (scaleValue);
 
-    repaint();
+    if (! chassisImg.isValid())
+    {
+        repaint();
+        return;
+    }
+
+    // ---- dirty-region repaints: only invalidate what changed this tick ----
+    // (the VU needle repaints itself through the meter component's own timer)
+    using namespace plategeo;
+    struct KnobRegion { VintageKnob* k; float cx, cy, maxR; };
+    const KnobRegion regions[] = {
+        { &gainKnob,    gainCx, bigCy, bigMaxR },
+        { &peakKnob,    peakCx, bigCy, bigMaxR },
+        { &hiFreqKnob,  smCx[0], smCy, smallMaxR },
+        { &attackKnob,  smCx[1], smCy, smallMaxR },
+        { &releaseKnob, smCx[2], smCy, smallMaxR },
+        { &mixKnob,     smCx[3], smCy, smallMaxR },
+        { &trimKnob,    smCx[4], smCy, smallMaxR },
+    };
+    // radius fractions are of image WIDTH; vertical extents need the aspect factor
+    const float ar = (float) chassisImg.getWidth() / (float) chassisImg.getHeight();
+    for (size_t i = 0; i < 7; ++i)
+    {
+        const double v = regions[i].k->getValue();
+        if (v != shownKnob[i])
+        {
+            shownKnob[i] = v;
+            repaint (plateFracRect (regions[i].cx - regions[i].maxR,
+                                    regions[i].cy - regions[i].maxR * ar,
+                                    regions[i].maxR * 2.0f,
+                                    regions[i].maxR * 2.0f * ar).expanded (2));
+        }
+    }
+
+    if (vuSource != shownVuSrc)
+    {
+        shownVuSrc = vuSource;
+        repaint (plateFracRect (vuX[0], vuY0, vuX[3] - vuX[0], vuY1 - vuY0).expanded (2));
+    }
+    if (analog != shownAnalog)
+    {
+        shownAnalog = analog;
+        repaint (plateFracRect (anX[0], anY0, anX[3] - anX[0], anY1 - anY0).expanded (2));
+    }
+
+    const bool autoOn = autoSwitch.getToggleState();
+    if (autoOn != shownAuto)
+    {
+        shownAuto = autoOn;
+        repaint (plateFracRect (ledX0, ledY0, ledX1 - ledX0, ledY1 - ledY0).expanded (4));
+    }
 }
 
 //==============================================================================
-// Opaque faceplate box inside the 1254x1254 plate art (measured from alpha).
-namespace { constexpr float OX0 = 20.0f, OY0 = 250.0f, OX1 = 1233.0f, OY1 = 1014.0f; }
-
 void Vocal2AEditor::paint (juce::Graphics& g)
 {
     if (chassisImg.isValid()) { paintPlate (g); return; }
@@ -423,124 +523,144 @@ void Vocal2AEditor::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-// Reveal the matching region of the lit plate over the base. Both plates share
-// the exact same geometry, so the source region maps 1:1 by fraction.
+// Blit the matching region of the lit plate over the base plate. Both scaled
+// caches share the editor's coordinate space, so this is a 1:1 copy — cheap,
+// and registration is exact by construction.
 void Vocal2AEditor::maskFromOn (juce::Graphics& g, juce::Rectangle<int> R)
 {
-    if (! chassisOnImg.isValid() || R.isEmpty()) return;
-    auto pr = plateRect();
-    const float PW = OX1 - OX0, PH = OY1 - OY0;
-    const float sx = OX0 + ((float) R.getX() - pr.getX()) / pr.getWidth()  * PW;
-    const float sy = OY0 + ((float) R.getY() - pr.getY()) / pr.getHeight() * PH;
-    const float sw = (float) R.getWidth()  / pr.getWidth()  * PW;
-    const float sh = (float) R.getHeight() / pr.getHeight() * PH;
-    g.drawImage (chassisOnImg, R.getX(), R.getY(), R.getWidth(), R.getHeight(),
-                 juce::roundToInt (sx), juce::roundToInt (sy),
-                 juce::roundToInt (sw), juce::roundToInt (sh), false);
+    if (! plateOnScaled.isValid() || R.isEmpty()) return;
+    g.drawImage (plateOnScaled, R.getX(), R.getY(), R.getWidth(), R.getHeight(),
+                 R.getX(), R.getY(), R.getWidth(), R.getHeight());
 }
 
-// The lit knob halo comes from the on-plate. `full` reveals the whole ring
-// (the mockup's small knobs glow all the way around); otherwise it's clipped
-// to a pie wedge from the start angle to the live value like a value ring.
-void Vocal2AEditor::drawKnobHalo (juce::Graphics& g, VintageKnob& k, float ringRfracW, bool full)
+// Same reveal but with a soft alpha ramp along the rect border, so the slight
+// global tone drift between the two plates never shows as a hard rectangle.
+void Vocal2AEditor::maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<int> R, int featherPx)
 {
-    if (! chassisOnImg.isValid()) return;
-    const auto c = k.getBounds().toFloat().getCentre();
-    const float ringR = ringRfracW * plateRect().getWidth();
-    const float R = ringR * 1.32f;                 // pie/halo outer radius
-
-    const int side = juce::roundToInt (R * 2.0f);
-    juce::Rectangle<int> box (juce::roundToInt (c.x) - side / 2,
-                              juce::roundToInt (c.y) - side / 2, side, side);
-
-    // The dome masks the glow: clip out the disc under the knob so the halo
-    // only lands outside the metal, never tinting the chrome rim. The hole
-    // radius tracks the sprite's measured visible-dome fraction.
-    const float domeR = k.getBounds().toFloat().getWidth() * 0.5f * k.domeDiaFrac() * 0.98f;
-
-    const float a0 = VintageKnob::startAngle();
-    const float a1 = k.valueAngle();
-    // At full value the entire baked ring lights, including the bottom gap
-    // outside the pointer sweep ("goes to 100").
-    const bool ringFull = full || a1 >= VintageKnob::endAngle() - 0.01f;
-    if (! ringFull && a1 <= a0 + 0.001f) return;
-
-    juce::Path clip;
-    if (ringFull)
-    {
-        // full annulus: outer disc with the dome disc as an even-odd hole
-        clip.addEllipse (c.x - R, c.y - R, R * 2.0f, R * 2.0f);
-        clip.addEllipse (c.x - domeR, c.y - domeR, domeR * 2.0f, domeR * 2.0f);
-        clip.setUsingNonZeroWinding (false);
-    }
-    else
-    {
-        // annular wedge: the pie segment's inner-circle proportion carves the
-        // dome hole without ever adding area outside the wedge
-        clip.addPieSegment (c.x - R, c.y - R, R * 2.0f, R * 2.0f, a0, a1, domeR / R);
-    }
+    constexpr int n = 4;
+    const float s = (float) featherPx / (float) n;
+    const auto r = R.toFloat();
 
     g.saveState();
-    g.reduceClipRegion (clip);
-    maskFromOn (g, box);
+    g.reduceClipRegion (r.reduced ((float) featherPx).toNearestInt());
+    maskFromOn (g, R);
     g.restoreState();
+
+    for (int j = 0; j < n; ++j)     // j = 0 is the outermost, faintest band
+    {
+        juce::Path band;
+        band.addRectangle (r.reduced (s * (float) j));
+        band.addRectangle (r.reduced (s * (float) (j + 1)));
+        band.setUsingNonZeroWinding (false);
+        g.saveState();
+        g.reduceClipRegion (band);
+        g.setOpacity (((float) j + 0.5f) / (float) n);
+        maskFromOn (g, R);
+        g.restoreState();
+    }
+}
+
+// Reveal a knob's lit neon ring as an annular wedge clipped to the value sweep
+// (6 o'clock -> 6 o'clock), with an angular feather on both ends and a radial
+// fade on the outer bloom so no hard cut ever shows.
+void Vocal2AEditor::drawRingWedge (juce::Graphics& g, juce::Slider& s, float cxFrac, float cyFrac,
+                                   float domeRFrac, float solidRFrac, float maxRFrac)
+{
+    const auto c = plateXY (cxFrac, cyFrac);
+    const float iw = (float) chassisImg.getWidth();
+    const float sx = (float) getWidth() / (float) plateCrop.getWidth();
+    const float domeR  = domeRFrac  * iw * sx;
+    const float solidR = solidRFrac * iw * sx;
+    const float R      = maxRFrac   * iw * sx;
+
+    const float prop = juce::jlimit (0.0f, 1.0f,
+                                     (float) s.valueToProportionOfLength (s.getValue()));
+    const float a0 = juce::MathConstants<float>::pi;
+    const bool full = prop >= 0.995f;
+    if (! full && prop <= 0.002f) return;
+    const float a1 = a0 + prop * juce::MathConstants<float>::twoPi;
+
+    const juce::Rectangle<int> box ((int) std::floor (c.x - R), (int) std::floor (c.y - R),
+                                    (int) std::ceil (R * 2.0f), (int) std::ceil (R * 2.0f));
+
+    auto wedge = [&] (float from, float to, float rIn, float rOut, float alpha)
+    {
+        if (to - from <= 0.0005f || rOut - rIn <= 0.5f) return;
+        juce::Path p;
+        p.addPieSegment (c.x - rOut, c.y - rOut, rOut * 2.0f, rOut * 2.0f, from, to, rIn / rOut);
+        g.saveState();
+        g.reduceClipRegion (p);
+        g.setOpacity (alpha);
+        maskFromOn (g, box);
+        g.restoreState();
+    };
+
+    // both ends of the arc are feathered so there is never a hard radial cut:
+    // fIn fades the start (6 o'clock) in, fOut fades the leading edge out. At
+    // full value the ring is a seamless uninterrupted annulus.
+    const float span = a1 - a0;
+    const float fOut = full ? 0.0f : juce::jmin (0.22f, span * 0.40f);
+    const float fIn  = full ? 0.0f : juce::jmin (0.10f, span * 0.20f);
+    const float aEnd = full ? a0 + juce::MathConstants<float>::twoPi : a1;
+
+    wedge (a0 + fIn, aEnd - fOut, domeR, solidR, 1.0f);
+    constexpr int aSteps = 10;
+    for (int i = 0; i < aSteps; ++i)
+    {
+        const float t0 = (float) i / aSteps, t1 = (float) (i + 1) / aSteps;
+        // leading edge fade-out
+        wedge (aEnd - fOut * (1.0f - t0), aEnd - fOut * (1.0f - t1),
+               domeR, solidR, 1.0f - (t0 + t1) * 0.5f);
+        // start edge fade-in
+        wedge (a0 + fIn * t0, a0 + fIn * t1,
+               domeR, solidR, (t0 + t1) * 0.5f);
+    }
+
+    // outer bloom band, faded radially and softened at both angular ends
+    constexpr int rSteps = 4;
+    for (int i = 0; i < rSteps; ++i)
+    {
+        const float alpha = 0.85f * (1.0f - ((float) i + 0.5f) / rSteps);
+        const float rIn  = solidR + (R - solidR) * (float) i / rSteps;
+        const float rOut = solidR + (R - solidR) * (float) (i + 1) / rSteps;
+        wedge (a0 + fIn, aEnd - fOut * 0.5f, rIn, rOut, alpha);
+        wedge (a0,             a0 + fIn * 0.5f, rIn, rOut, alpha * 0.33f);
+        wedge (a0 + fIn * 0.5f, a0 + fIn,       rIn, rOut, alpha * 0.66f);
+    }
 }
 
 //==============================================================================
 void Vocal2AEditor::paintPlate (juce::Graphics& g)
 {
-    // charcoal backdrop (shows only in the plate's rounded corners)
-    {
-        auto b = getLocalBounds().toFloat();
-        juce::ColourGradient vg (juce::Colour (0xff2b2d31), 0.0f, b.getY(),
-                                 juce::Colour (0xff141518), 0.0f, b.getBottom(), false);
-        vg.addColour (0.5, juce::Colour (0xff202226));
-        g.setGradientFill (vg);
-        g.fillRect (b);
-    }
+    using namespace plategeo;
 
-    auto pr = plateRect();
+    g.drawImageAt (plateScaled, 0, 0);   // cached 1:1 blit — no per-frame rescale
 
-    // ---- base (off) plate: draw the opaque faceplate region into the window ----
-    g.drawImage (chassisImg, pr.getX(), pr.getY(), pr.getWidth(), pr.getHeight(),
-                 (int) OX0, (int) OY0, (int) (OX1 - OX0), (int) (OY1 - OY0), false);
+    const int feather = juce::roundToInt ((float) getWidth() * 0.008f);
 
-    // ---- masked lit regions from the on-plate ----
+    // ---- selected pills from the lit plate ----
+    // Rects run seam-to-seam, so no expansion: growing them would reveal the
+    // neighbouring pill's lit edge (the ON plate has ALL pills lit).
     const int vuSrc  = (int) proc.apvts.getRawParameterValue ("vuSource")->load();
     const int analog = (int) proc.apvts.getRawParameterValue ("analog")->load();
-    // Rects already run seam-to-seam, so no expansion: growing them would
-    // reveal the neighbouring pill's lit edge (the ON plate has ALL pills lit).
     if (vuSrc  >= 0 && vuSrc  < 3) maskFromOn (g, vuBtnR[(size_t) vuSrc]);
     if (analog >= 0 && analog < 3) maskFromOn (g, analogBtnR[(size_t) analog]);
 
-    drawKnobHalo (g, gainKnob, 0.099f);
-    drawKnobHalo (g, peakKnob, 0.099f);
-    for (auto* k : { &hiFreqKnob, &attackKnob, &releaseKnob, &mixKnob, &trimKnob })
-        drawKnobHalo (g, *k, 0.041f);   // value-masked; full ring lights at max
+    // ---- knob neon ring wedges ----
+    drawRingWedge (g, gainKnob, gainCx, bigCy, bigDomeR, bigSolidR, bigMaxR);
+    drawRingWedge (g, peakKnob, peakCx, bigCy, bigDomeR, bigSolidR, bigMaxR);
+    const std::array<VintageKnob*, 5> sk { &hiFreqKnob, &attackKnob, &releaseKnob, &mixKnob, &trimKnob };
+    for (int i = 0; i < 5; ++i)
+        drawRingWedge (g, *sk[(size_t) i], smCx[i], smCy, smallDomeR, smallSolidR, smallMaxR);
 
-    // ---- auto-makeup LED (code jewel over the blank baked mount) ----
-    {
-        const bool lit = autoSwitch.getToggleState();
-        auto lb = ledBounds.toFloat();
-        const auto c = lb.getCentre();
-        const float rr = lb.getWidth() * 0.5f;
-        if (lit)
-        {
-            juce::ColourGradient bloom (juce::Colour (0xffff5a7a).withAlpha (0.75f), c.x, c.y,
-                                        juce::Colours::transparentBlack, c.x, c.y + rr * 2.4f, true);
-            g.setGradientFill (bloom);
-            g.fillEllipse (lb.expanded (rr * 1.6f));
-            g.setColour (juce::Colour (0xffff2b4d));
-            g.fillEllipse (lb);
-            g.setColour (juce::Colours::white.withAlpha (0.85f));
-            g.fillEllipse (c.x - rr * 0.35f, c.y - rr * 0.5f, rr * 0.5f, rr * 0.5f);
-        }
-        else
-        {
-            g.setColour (juce::Colour (0xff6a2630));
-            g.fillEllipse (lb);
-        }
-    }
+    // ---- VU under-glow strip: always lit while the plugin runs ----
+    maskFromOnFeathered (g, plateFracRect (stripX0, stripY0, stripX1 - stripX0, stripY1 - stripY0),
+                         feather);
+
+    // ---- auto-makeup LED jewel: the lit state is baked into the ON plate ----
+    if (autoSwitch.getToggleState())
+        maskFromOnFeathered (g, plateFracRect (ledX0, ledY0, ledX1 - ledX0, ledY1 - ledY0),
+                             juce::jmax (2, feather / 2));
 }
 
 //==============================================================================
@@ -567,71 +687,72 @@ void Vocal2AEditor::resized()
     // ---- baked-plate layout: everything keyed to the measured plate fractions ----
     if (chassisImg.isValid())
     {
-        auto pr = plateRect();
-        auto knobRect = [&] (float cx, float cy, float diamFracW)
+        using namespace plategeo;
+
+        // rebuild the scaled plate caches whenever the window geometry changes
+        if (plateScaled.getWidth() != getWidth() || plateScaled.getHeight() != getHeight())
         {
-            const float d = diamFracW * pr.getWidth();
+            plateScaled = skin::renderPlate (chassisImg, plateCrop, getWidth(), getHeight());
+            if (chassisOnImg.isValid())
+                plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop, getWidth(), getHeight());
+        }
+
+        const float iw = (float) chassisImg.getWidth();
+        const float sx = (float) getWidth() / (float) plateCrop.getWidth();
+        auto domeSquare = [&] (float cx, float cy, float diaFracW)
+        {
+            const float d = diaFracW * iw * sx;
             const auto c = plateXY (cx, cy);
             return juce::Rectangle<float> (c.x - d * 0.5f, c.y - d * 0.5f, d, d).toNearestInt();
         };
         auto boxWH = [&] (float cx, float cy, float wFracW, float hFracW)
         {
-            const float w = wFracW * pr.getWidth(), h = hFracW * pr.getWidth();
+            const float w = wFracW * iw * sx, h = hFracW * iw * sx;
             const auto c = plateXY (cx, cy);
             return juce::Rectangle<float> (c.x - w * 0.5f, c.y - h * 0.5f, w, h).toNearestInt();
         };
 
-        // big knobs (dome only; ring seat + halo are on the plate). Centres are
-        // the measured lit-halo circle centres from the ON/OFF plate diff, so
-        // dome, seat and halo all share one centre.
-        // New sprites have more transparent margin: dome is 0.765 (large) /
-        // 0.518 (small) of the canvas, so bounds grow to keep the same dome size.
-        gainKnob.setBounds (knobRect (0.1810f, 0.4156f, 0.203f));
-        peakKnob.setBounds (knobRect (0.8075f, 0.4156f, 0.203f));
-        gainVal.setBounds (boxWH (0.1810f, 0.214f, 0.13f, 0.055f));
-        peakVal.setBounds (boxWH (0.8075f, 0.214f, 0.13f, 0.055f));
+        // big knobs: dome sprites sized so the dome hugs the seat groove
+        gainKnob.setBounds (domeSquare (gainCx, bigCy, bigDomeBox));
+        peakKnob.setBounds (domeSquare (peakCx, bigCy, bigDomeBox));
+        gainVal.setBounds (plateFracRect (gainCx - bigValW * 0.5f, bigValY0, bigValW, bigValY1 - bigValY0));
+        peakVal.setBounds (plateFracRect (peakCx - bigValW * 0.5f, bigValY0, bigValW, bigValY1 - bigValY0));
 
-        // small utility knobs (measured halo centres)
-        const std::array<std::pair<float,float>,5> sc {{
-            {0.3689f,0.8331f},{0.4897f,0.8338f},{0.6109f,0.8338f},{0.7333f,0.8318f},{0.8549f,0.8338f} }};
-        std::array<VintageKnob*,5> sk { &hiFreqKnob,&attackKnob,&releaseKnob,&mixKnob,&trimKnob };
-        std::array<juce::Label*,5>  scap { &hiFreqCap,&attackCap,&releaseCap,&mixCap,&trimCap };
+        // small utility knobs + live readouts under them
+        const std::array<VintageKnob*, 5> sk { &hiFreqKnob, &attackKnob, &releaseKnob, &mixKnob, &trimKnob };
+        const std::array<juce::Label*, 5> scap { &hiFreqCap, &attackCap, &releaseCap, &mixCap, &trimCap };
         for (int i = 0; i < 5; ++i)
         {
-            sk[(size_t) i]->setBounds (knobRect (sc[(size_t) i].first, sc[(size_t) i].second, 0.120f));
-            // value readout: centred just under the knob, above the tray bevel
-            scap[(size_t) i]->setBounds (boxWH (sc[(size_t) i].first, 0.920f, 0.12f, 0.030f));
+            sk[(size_t) i]->setBounds (domeSquare (smCx[i], smCy, smallDomeBox));
+            scap[(size_t) i]->setBounds (plateFracRect (smCx[i] - smValW * 0.5f, smValY0,
+                                                        smValW, smValY1 - smValY0));
             scap[(size_t) i]->setJustificationType (juce::Justification::centred);
         }
 
-        // selector buttons (invisible hit areas; visuals baked/masked).
-        // Edges are the measured pill boundaries + seam valleys from the plate
-        // diff, so each mask covers exactly its own lit pill and nothing else.
-        auto bandRects = [&] (const std::array<float,4>& xe, float y0, float y1,
-                              std::array<juce::Rectangle<int>,3>& out)
+        // selector buttons (invisible hit areas; visuals baked/masked). Edges
+        // are the measured seam valleys so each mask covers exactly its pill.
+        for (int i = 0; i < 3; ++i)
         {
-            for (int i = 0; i < 3; ++i)
-                out[(size_t) i] = plateFracRect (xe[(size_t) i], y0,
-                                                 xe[(size_t) i + 1] - xe[(size_t) i], y1 - y0);
-        };
-        bandRects ({ 0.6777f, 0.7609f, 0.8557f, 0.9398f }, 0.0902f, 0.1571f, vuBtnR);
-        bandRects ({ 0.0709f, 0.1418f, 0.2127f, 0.2819f }, 0.7957f, 0.8666f, analogBtnR);
-        for (int i = 0; i < 3; ++i) vuButtons[(size_t) i].setBounds (vuBtnR[(size_t) i]);
-        for (int i = 0; i < 3; ++i) analogButtons[(size_t) i].setBounds (analogBtnR[(size_t) i]);
+            vuBtnR[(size_t) i]     = plateFracRect (vuX[i], vuY0, vuX[i + 1] - vuX[i], vuY1 - vuY0);
+            analogBtnR[(size_t) i] = plateFracRect (anX[i], anY0, anX[i + 1] - anX[i], anY1 - anY0);
+            vuButtons[(size_t) i].setBounds (vuBtnR[(size_t) i]);
+            analogButtons[(size_t) i].setBounds (analogBtnR[(size_t) i]);
+        }
 
-        // bat toggles + code LED, centred on the measured label text row
-        // (compress/limit glyphs span y 0.632-0.652, centre 0.642). mode sits in
-        // the gap between "compress" (ends 0.1484) and "limit" (starts 0.2152);
-        // auto sits just right of "auto makeup" (ends 0.7988) with the LED beside.
-        modeSwitch.setBounds (boxWH (0.1818f, 0.6420f, 0.080f, 0.044f));
-        autoSwitch.setBounds (boxWH (0.8400f, 0.6420f, 0.080f, 0.044f));
-        ledBounds = boxWH (0.8850f, 0.6420f, 0.020f, 0.020f);
+        // bat toggles in the measured caption gaps (compress|limit, auto makeup|LED)
+        modeSwitch.setBounds (boxWH (modeCx, togCy, togW, togH));
+        autoSwitch.setBounds (boxWH (autoCx, togCy, togW, togH));
+        ledBounds = plateFracRect (ledX0, ledY0, ledX1 - ledX0, ledY1 - ledY0);
 
-        // VU needle over the baked meter face (hub near the bottom-centre of the
-        // cream face; tip reaches the printed scale arc)
-        vuCard = plateFracRect (0.350f, 0.300f, 0.340f, 0.300f);
+        // VU needle over the baked meter face. The pivot is the centre of the
+        // circle fitted through the printed scale numbers (it sits below the
+        // face, so the component bounds clip the needle at the glass edge).
+        vuCard = plateFracRect (vuFX0, vuFY0, vuFX1 - vuFX0, vuFY1 - vuFY0);
         vu.setBounds (vuCard);
-        vu.pivotFx = 0.491f; vu.pivotFy = 0.850f; vu.tipLenFx = 0.350f;
+        vu.setInterceptsMouseClicks (false, false);
+        vu.pivotFx = (vuPivotX - vuFX0) / (vuFX1 - vuFX0);
+        vu.pivotFy = (vuPivotY - vuFY0) / (vuFY1 - vuFY0);
+        vu.tipLenFx = vuTipLen / (vuFX1 - vuFX0);
 
         // hide baked static labels; keep live numbers/values visible
         for (auto* l : { &vuTitle, &gainCap, &peakCap, &modeCapL, &modeCapR, &autoCap,

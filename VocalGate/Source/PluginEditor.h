@@ -9,6 +9,7 @@
 #include "ui/Bounce.h"
 #include "../../common/ui/Skin.h"
 #include "../../common/Licensing/ActivationOverlay.h"
+#include <array>
 
 using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
 using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
@@ -42,6 +43,16 @@ private:
 
     juce::Image chassisImg, chassisOnImg;
     bool plateBaked = false;
+
+    // crop-to-chrome: the plate's bright bbox inside the generated canvas; the
+    // editor shows ONLY this region (backdrop never visible). Scaled copies are
+    // cached per resize so per-frame paints are 1:1 blits.
+    juce::Rectangle<int> plateCrop;
+    juce::Image plateScaled, plateOnScaled;
+
+    // dirty-region repaint bookkeeping (only repaint what changed each tick)
+    std::array<double, 7> shownKnob {};
+    bool shownScListen = false;
 
     VocalGateProcessor& proc;
     GateLookAndFeel lnf;

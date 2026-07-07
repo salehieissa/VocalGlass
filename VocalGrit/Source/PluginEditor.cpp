@@ -319,6 +319,8 @@ VocalGritEditor::VocalGritEditor (VocalGritProcessor& p)
     {
         using namespace plategeo;
 
+        plateCrop = skin::plateBounds (chassisImg);
+
         gritDial.setPlateMode (true);
 
         // preset arrows are baked chrome buttons — invisible hit circles
@@ -406,10 +408,19 @@ VocalGritEditor::VocalGritEditor (VocalGritProcessor& p)
         const float domeScale = (fxDomeDia / skin::croppedDomeFrac()) / 0.056f;
         for (auto* s : fx)
             s->getProperties().set ("domeScale", domeScale);
+
+        shownPlateKnob.assign (plateKnobs.size(), -1.0e9);
     }
 
     startTimerHz (30);
-    setSize (baked ? 1000 : 1000, baked ? 819 : 808);
+    // plate mode: the window shows ONLY the plate (cropped at the chrome edge),
+    // and must match the crop's aspect exactly or circular dome sprites sit in
+    // vertically-stretched (elliptical) baked grooves
+    if (baked)
+        setSize (1000, juce::roundToInt (1000.0f * (float) plateCrop.getHeight()
+                                                 / (float) plateCrop.getWidth()));
+    else
+        setSize (1000, 808);
 
     // License overlay sits on top of everything; it shows itself until activated.
     addChildComponent (licenseOverlay);
@@ -496,7 +507,99 @@ void VocalGritEditor::timerCallback()
         inDbLbl.setText (dbText (inSm),  juce::dontSendNotification);
         outDbLbl.setText (dbText (outSm), juce::dontSendNotification);
 
-        repaint();   // masks + ring wedges + meters all live in paintPlate
+        // dirty-region repaints: only invalidate what actually changed this tick
+        using namespace plategeo;
+        // radius fractions are of image WIDTH; vertical extents need the aspect factor
+        const float ar = (float) chassisImg.getWidth() / (float) chassisImg.getHeight();
+
+        auto ringRect = [&] (const PlateKnob& k)
+        {
+            return plateFracRect (k.cx - k.wedgeR, k.cy - k.wedgeR * ar,
+                                  k.wedgeR * 2.0f, k.wedgeR * 2.0f * ar).expanded (2);
+        };
+        for (size_t i = 0; i < plateKnobs.size(); ++i)
+        {
+            const double v = plateKnobs[i].s->getValue();
+            if (v != shownPlateKnob[i])
+            {
+                shownPlateKnob[i] = v;
+                repaint (ringRect (plateKnobs[i]));
+            }
+        }
+
+        // character bank: relight the whole row when the mode changes
+        if (auto* pm = proc.apvts.getRawParameterValue ("mode"))
+        {
+            const int mode = juce::jlimit (0, 3, (int) pm->load());
+            if (mode != shownMode)
+            {
+                shownMode = mode;
+                for (int i = 0; i < 4; ++i)
+                    repaint (plateFracRect (charX[i][0], charY0,
+                                            charX[i][1] - charX[i][0],
+                                            charY1 - charY0).expanded (2));
+            }
+        }
+        for (size_t i = 0; i < 4; ++i)
+        {
+            const bool on = pills[i].getToggleState();
+            if (on != shownPills[i])
+            {
+                shownPills[i] = on;
+                repaint (plateFracRect (texX[i][0], texY0,
+                                        texX[i][1] - texX[i][0], texY1 - texY0).expanded (2));
+            }
+        }
+
+        // FX cards: divider + on pill light together
+        const juce::ToggleButton* fxOn[4] = { &doublerOn, &delayOn, &reverbOn, &glitchOn };
+        for (size_t i = 0; i < 4; ++i)
+        {
+            const bool on = fxOn[i]->getToggleState();
+            if (on != shownFxOn[i])
+            {
+                shownFxOn[i] = on;
+                repaint (plateFracRect (divX[i][0], divY0,
+                                        divX[i][1] - divX[i][0], divY1 - divY0).expanded (2));
+                repaint (plateFracRect (onX[i][0], onY0,
+                                        onX[i][1] - onX[i][0], onY1 - onY0).expanded (2));
+            }
+        }
+        if (delaySyncBtn.getToggleState() != shownSync)
+        {
+            shownSync = delaySyncBtn.getToggleState();
+            repaint (plateFracRect (syncX0, onY0, syncX1 - syncX0, onY1 - onY0).expanded (2));
+            if (plateKnobs.size() > 4)
+                repaint (ringRect (plateKnobs[4]));   // delay time ring shows/hides with sync
+        }
+
+        // slider fills
+        const juce::Slider* vsl[4] = { &driveS.slider, &toneS.slider,
+                                       &widthS.slider, &formantS.slider };
+        for (size_t i = 0; i < 4; ++i)
+        {
+            const double v = vsl[i]->getValue();
+            if (v != shownVs[i])
+            {
+                shownVs[i] = v;
+                repaint (plateFracRect (vsX[i] - vsHalfW, vsY0,
+                                        vsHalfW * 2.0f, vsY1 - vsY0).expanded (3));
+            }
+        }
+        if (mixSlider.getValue() != shownMix)
+        {
+            shownMix = mixSlider.getValue();
+            repaint (plateFracRect (hX0, mixY0, hX1 - hX0, mixY1 - mixY0).expanded (2));
+        }
+        if (outputSlider.getValue() != shownOut)
+        {
+            shownOut = outputSlider.getValue();
+            repaint (plateFracRect (hX0, outY0, hX1 - hX0, outY1 - outY0).expanded (2));
+        }
+
+        // meters move continuously — repaint only their own bars every tick
+        repaint (plateFracRect (mX0, mInY0,  mX1 - mX0, mInY1 - mInY0).expanded (2));
+        repaint (plateFracRect (mX0, mOutY0, mX1 - mX0, mOutY1 - mOutY0).expanded (2));
         return;
     }
 
@@ -514,70 +617,66 @@ void VocalGritEditor::timerCallback()
 }
 
 //==============================================================================
+// plategeo fractions are of the FULL generated canvas; the window shows only
+// the plateCrop region, so map full-canvas fraction -> cropped screen px.
 juce::Point<float> VocalGritEditor::plateXY (float fx, float fy) const
 {
-    return { fx * (float) getWidth(), fy * (float) getHeight() };
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+    const float sy = (float) getHeight() / (float) plateCrop.getHeight();
+    return { (fx * iw - (float) plateCrop.getX()) * sx,
+             (fy * ih - (float) plateCrop.getY()) * sy };
 }
 
 juce::Rectangle<int> VocalGritEditor::plateFracRect (float fx, float fy, float fw, float fh) const
 {
-    return juce::Rectangle<float> (fx * (float) getWidth(),  fy * (float) getHeight(),
-                                   fw * (float) getWidth(),  fh * (float) getHeight())
-               .toNearestInt();
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+    const float sy = (float) getHeight() / (float) plateCrop.getHeight();
+    return juce::Rectangle<float> ((fx * iw - (float) plateCrop.getX()) * sx,
+                                   (fy * ih - (float) plateCrop.getY()) * sy,
+                                   fw * iw * sx,
+                                   fh * ih * sy).toNearestInt();
 }
 
-// Blit the matching region of the lit plate over the base plate — pixel
-// registration is guaranteed because both images share the same canvas
-// (the plate fills the whole canvas, so screen fractions map 1:1).
+// Blit the matching region of the lit plate over the base plate. Both scaled
+// caches share the editor's coordinate space, so this is a 1:1 copy — cheap,
+// and registration is exact by construction.
 void VocalGritEditor::maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect)
 {
-    const float iw = (float) chassisOnImg.getWidth(), ih = (float) chassisOnImg.getHeight();
-    g.drawImage (chassisOnImg,
+    g.drawImage (plateOnScaled,
                  screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight(),
-                 juce::roundToInt (((float) screenRect.getX()      / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getY()      / (float) getHeight()) * ih),
-                 juce::roundToInt (((float) screenRect.getWidth()  / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getHeight() / (float) getHeight()) * ih));
+                 screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight());
 }
 
 // Reveal the lit neon ring around a knob as an annular wedge clipped to the
-// value sweep. The dome disc is carved out so the glow never tints the steel.
+// value sweep (6 o'clock -> 6 o'clock), with angular feathers on BOTH ends so
+// no hard radial cut ever shows. At max value the ring is a seamless annulus.
 void VocalGritEditor::drawPlateHalo (juce::Graphics& g, const PlateKnob& k)
 {
+    // fractions are of the full canvas; convert through the crop mapping
     const auto c = plateXY (k.cx, k.cy);
-    const float R = k.wedgeR * (float) getWidth();
+    const float iw = (float) chassisImg.getWidth();
+    const float sx = (float) getWidth() / (float) plateCrop.getWidth();
+    const float R     = k.wedgeR * iw * sx;
+    const float domeR = k.domeR  * iw * sx;
 
     const float prop = juce::jlimit (0.0f, 1.0f,
                                      (float) k.s->valueToProportionOfLength (k.s->getValue()));
 
     const float a0 = juce::MathConstants<float>::pi;
+    const bool full = prop >= 0.995f;
+    if (! full && prop <= 0.002f) return;
     const float a1 = a0 + prop * juce::MathConstants<float>::twoPi;
-    const bool ringFull = prop >= 0.995f;
-    if (! ringFull && prop <= 0.002f) return;
 
-    const float domeR = k.domeR * (float) getWidth();
     const juce::Rectangle<int> box ((int) std::floor (c.x - R), (int) std::floor (c.y - R),
                                     (int) std::ceil (R * 2.0f), (int) std::ceil (R * 2.0f));
 
-    if (ringFull)
+    auto wedge = [&] (float from, float to, float rIn, float rOut, float alpha)
     {
-        juce::Path clip;
-        clip.addEllipse (c.x - R, c.y - R, R * 2.0f, R * 2.0f);
-        clip.addEllipse (c.x - domeR, c.y - domeR, domeR * 2.0f, domeR * 2.0f);
-        clip.setUsingNonZeroWinding (false);
-        g.saveState();
-        g.reduceClipRegion (clip);
-        maskFromOn (g, box);
-        g.restoreState();
-        return;
-    }
-
-    // annular wedge with a feathered leading edge (never a hard radial cut)
-    auto wedge = [&] (float from, float to, float alpha)
-    {
-        if (to - from <= 0.0005f) return;
+        if (to - from <= 0.0005f || rOut - rIn <= 0.5f) return;
         juce::Path p;
-        p.addPieSegment (c.x - R, c.y - R, R * 2.0f, R * 2.0f, from, to, domeR / R);
+        p.addPieSegment (c.x - rOut, c.y - rOut, rOut * 2.0f, rOut * 2.0f, from, to, rIn / rOut);
         g.saveState();
         g.reduceClipRegion (p);
         g.setOpacity (alpha);
@@ -585,22 +684,33 @@ void VocalGritEditor::drawPlateHalo (juce::Graphics& g, const PlateKnob& k)
         g.restoreState();
     };
 
-    const float feather = juce::jmin (0.22f, (a1 - a0) * 0.5f);
-    wedge (a0, a1 - feather, 1.0f);
-    constexpr int steps = 5;
-    for (int i = 0; i < steps; ++i)
-        wedge (a1 - feather * (1.0f - (float) i / steps),
-               a1 - feather * (1.0f - (float) (i + 1) / steps),
-               1.0f - ((float) i + 0.5f) / steps);
+    // both ends of the arc are feathered so there is never a hard radial cut:
+    // fIn fades the start (6 o'clock) in, fOut fades the leading edge out. At
+    // full value the ring is a seamless uninterrupted annulus.
+    const float span = a1 - a0;
+    const float fOut = full ? 0.0f : juce::jmin (0.22f, span * 0.40f);
+    const float fIn  = full ? 0.0f : juce::jmin (0.10f, span * 0.20f);
+    const float aEnd = full ? a0 + juce::MathConstants<float>::twoPi : a1;
+
+    wedge (a0 + fIn, aEnd - fOut, domeR, R, 1.0f);
+    constexpr int aSteps = 10;
+    for (int i = 0; i < aSteps; ++i)
+    {
+        const float t0 = (float) i / aSteps, t1 = (float) (i + 1) / aSteps;
+        // leading edge fade-out
+        wedge (aEnd - fOut * (1.0f - t0), aEnd - fOut * (1.0f - t1),
+               domeR, R, 1.0f - (t0 + t1) * 0.5f);
+        // start edge fade-in
+        wedge (a0 + fIn * t0, a0 + fIn * t1,
+               domeR, R, (t0 + t1) * 0.5f);
+    }
 }
 
 void VocalGritEditor::paintPlate (juce::Graphics& g)
 {
     using namespace plategeo;
 
-    // base plate fills the window (the window matches the canvas aspect)
-    g.drawImage (chassisImg, getLocalBounds().toFloat(),
-                 juce::RectanglePlacement::stretchToFit);
+    g.drawImageAt (plateScaled, 0, 0);   // cached 1:1 blit — no per-frame rescale
 
     // ---- selector banks: reveal the lit pill for the active states
     if (auto* pm = proc.apvts.getRawParameterValue ("mode"))
@@ -753,14 +863,20 @@ void VocalGritEditor::resized()
     if (chassisImg.isValid())
     {
         using namespace plategeo;
-        const float W = (float) getWidth();
-        const float H = (float) getHeight();
+
+        // rebuild the scaled plate caches for the new size (1:1 blits per frame)
+        plateScaled   = skin::renderPlate (chassisImg,   plateCrop, getWidth(), getHeight());
+        plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop, getWidth(), getHeight());
+
+        // size fractions are of the full canvas WIDTH; convert through the crop
+        const float iw = (float) chassisImg.getWidth();
+        const float sx = (float) getWidth() / (float) plateCrop.getWidth();
 
         // centred square for a dome sprite, sized so the visible dome (a
         // measured fraction of the sprite canvas) matches the plate's seat
         auto knobRect = [&] (float cx, float cy, float sideFracW)
         {
-            const int side = juce::roundToInt (sideFracW * W);
+            const int side = juce::roundToInt (sideFracW * iw * sx);
             const auto c = plateXY (cx, cy);
             return juce::Rectangle<int> (juce::roundToInt (c.x - side * 0.5f),
                                          juce::roundToInt (c.y - side * 0.5f), side, side);
@@ -784,20 +900,25 @@ void VocalGritEditor::resized()
             { &widthS, vsX[2] }, { &formantS, vsX[3] } };
         for (auto& [s, cx] : verts)
         {
-            s->slider.setBounds (juce::roundToInt (cx * W - 14.0f),
-                                 juce::roundToInt (vsY0 * H) - tr,
+            const auto cTop = plateXY (cx, vsY0);
+            const auto cBot = plateXY (cx, vsY1);
+            s->slider.setBounds (juce::roundToInt (cTop.x - 14.0f),
+                                 juce::roundToInt (cTop.y) - tr,
                                  28,
-                                 juce::roundToInt ((vsY1 - vsY0) * H) + tr * 2);
+                                 juce::roundToInt (cBot.y - cTop.y) + tr * 2);
             s->value.setBounds (plateFracRect (cx - 0.040f, 0.176f, 0.080f, 0.036f));
         }
 
         // mix / output horizontal sliders + pink readouts in the caption rows
-        mixSlider.setBounds    (juce::roundToInt (hX0 * W) - tr,
-                                juce::roundToInt (mixCy * H - 14.0f),
-                                juce::roundToInt ((hX1 - hX0) * W) + tr * 2, 28);
-        outputSlider.setBounds (juce::roundToInt (hX0 * W) - tr,
-                                juce::roundToInt (outCy * H - 14.0f),
-                                juce::roundToInt ((hX1 - hX0) * W) + tr * 2, 28);
+        const auto mixL = plateXY (hX0, mixCy);
+        const auto mixR = plateXY (hX1, mixCy);
+        const auto outL = plateXY (hX0, outCy);
+        mixSlider.setBounds    (juce::roundToInt (mixL.x) - tr,
+                                juce::roundToInt (mixL.y - 14.0f),
+                                juce::roundToInt (mixR.x - mixL.x) + tr * 2, 28);
+        outputSlider.setBounds (juce::roundToInt (outL.x) - tr,
+                                juce::roundToInt (outL.y - 14.0f),
+                                juce::roundToInt (mixR.x - mixL.x) + tr * 2, 28);
         mixValue.setBounds    (plateFracRect (0.830f, 0.370f, 0.102f, 0.024f));
         outputValue.setBounds (plateFracRect (0.830f, 0.516f, 0.102f, 0.024f));
 

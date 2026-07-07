@@ -157,14 +157,15 @@ private:
         skin::drawNeedle (g, needleImg, pivot, 0.503f, 0.81f, 0.093f, lenToTip, ang);
     }
 
-    // Angle (deg, clockwise, 0 = up) for a printed scale value, from measured
-    // tick positions on the face art. Interpolated / clamped between marks.
+    // Angle (deg, clockwise, 0 = up) for a printed scale value. Measured off
+    // the glass/chrome plate: circle-fit pivot through the printed numbers,
+    // then the angle each number subtends from it. Interpolated between marks.
     static float angleDegForValue (float v)
     {
         struct A { float value, deg; };
         static const std::array<A, 7> k = {{
-            { -20.0f, -47.7f }, { -10.0f, -31.9f }, { -7.0f, -18.3f },
-            { -5.0f, -3.7f }, { -3.0f, 13.7f }, { 0.0f, 30.0f }, { 3.0f, 46.0f }
+            { -20.0f, -27.8f }, { -10.0f, -17.5f }, { -7.0f, -10.7f },
+            { -5.0f, -5.3f }, { -3.0f, 1.1f }, { 0.0f, 13.8f }, { 3.0f, 29.6f }
         }};
         if (v <= k.front().value) return k.front().deg;
         if (v >= k.back().value)  return k.back().deg;

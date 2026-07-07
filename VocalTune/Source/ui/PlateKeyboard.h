@@ -53,7 +53,7 @@ public:
             g.saveState();
             g.reduceClipRegion (whiteLocal (w).toNearestInt());
             for (int b = 0; b < kNumBlack; ++b)
-                g.excludeClipRegion (blackLocal (b, 2.0f).toNearestInt());
+                g.excludeClipRegion (blackLocal (b, 0.0f).toNearestInt());
             blitOn (g, whiteLocal (w));
             g.restoreState();
         }
@@ -77,15 +77,18 @@ public:
 
 private:
     //==========================================================================
-    // Measured image-pixel geometry (2048x1360 plates).
+    // Measured image-pixel geometry (2048x1360 plates). The vertical extent
+    // covers the keys' neon rims (750..1017) so lit keys light edge-to-edge,
+    // and the black-key mask runs seam-to-seam (dark valleys at cx +/- 22,
+    // bottom seam at y 912) so no unlit collar shows around a black key.
     static constexpr float kX0 = 131.3f, kX1 = 1267.0f;   // white-key extent
-    static constexpr float kY0 = 758.0f, kY1 = 1010.0f;
-    static constexpr float kBlackY1 = 916.0f;             // black keys' bottom
+    static constexpr float kY0 = 750.0f, kY1 = 1017.0f;
+    static constexpr float kBlackY1 = 912.0f;             // black keys' bottom seam
     static constexpr int kNumWhite = 15, kNumBlack = 10;
     static constexpr float kSepA = 205.63f, kSepB = 74.31f; // sep(i) = A + B*i
     static constexpr float kBlackCx[kNumBlack] = { 202.0f, 284.0f, 423.0f, 499.0f, 575.0f,
                                                    720.0f, 796.0f, 945.0f, 1021.0f, 1100.0f };
-    static constexpr float kBlackHalfW = 24.0f;
+    static constexpr float kBlackHalfW = 22.0f;
     static constexpr int kBlackPitch[kNumBlack] = { 1, 3, 6, 8, 10, 1, 3, 6, 8, 10 };
 
     static int whitePitch (int w)

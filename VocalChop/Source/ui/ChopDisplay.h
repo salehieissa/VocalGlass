@@ -64,8 +64,17 @@ public:
             g.fillRoundedRectangle (r.reduced (1.5f), rad - 1.0f);
         }
 
-        auto inner = r.reduced (r.getWidth() * 0.025f, r.getHeight() * 0.12f);
+        // bars span the full glass width; a soft alpha ramp at both ends makes
+        // the waveform feather out instead of stopping at a hard border
+        auto inner = r.reduced (r.getWidth() * 0.004f, r.getHeight() * 0.12f);
         const float midY = inner.getCentreY();
+        const float edgeFadeW = inner.getWidth() * 0.045f;
+        auto edgeFade = [&] (float x)
+        {
+            const float dl = (x - inner.getX()) / edgeFadeW;
+            const float dr = (inner.getRight() - x) / edgeFadeW;
+            return juce::jlimit (0.0f, 1.0f, juce::jmin (dl, dr));
+        };
 
         g.saveState();
         juce::Path clip; clip.addRoundedRectangle (r.reduced (2.0f), rad - 1.5f);
@@ -77,7 +86,7 @@ public:
         {
             const float x = inner.getX() + inner.getWidth() * (float) i * chopFrac;
             if (x > inner.getRight()) break;
-            g.setColour (juce::Colours::white.withAlpha (0.08f));
+            g.setColour (juce::Colours::white.withAlpha (0.08f * edgeFade (x)));
             g.drawVerticalLine ((int) x, inner.getY(), inner.getBottom());
         }
         // centre hairline
@@ -110,6 +119,7 @@ public:
             if (dist < 6.0f && ! ahead)
                 alpha = juce::jmin (1.0f, alpha + (6.0f - dist) * 0.05f);
 
+            alpha *= edgeFade (x + bw * 0.5f);
             g.setColour (accent.withAlpha (alpha * juce::jmax (0.35f, v + 0.3f)));
             g.fillRoundedRectangle (x + bw * 0.18f, midY - h, bw * 0.64f, h * 2.0f, bw * 0.3f);
         }

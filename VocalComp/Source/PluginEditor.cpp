@@ -68,6 +68,8 @@ VocalCompEditor::VocalCompEditor (VocalCompProcessor& p)
     chassisOnImg = skin::image ("comp-chassis-on@2x.png");
     const bool baked = chassisImg.isValid() && chassisOnImg.isValid();
     laf.plate = baked;
+    if (baked)
+        plateCrop = skin::plateBounds (chassisImg);
 
     auto addLabel = [this] (juce::Label& l, const juce::String& text, float size, bool bold,
                             juce::Colour col, juce::Justification just)
@@ -215,7 +217,14 @@ VocalCompEditor::VocalCompEditor (VocalCompProcessor& p)
     }
 
     startTimerHz (30);
-    setSize (baked ? 1024 : 820, baked ? 680 : 500);
+    // plate mode: the window shows ONLY the plate (cropped at the chrome edge),
+    // and must match the crop's aspect exactly or circular dome sprites sit in
+    // vertically-stretched (elliptical) baked grooves
+    if (baked)
+        setSize (1024, juce::roundToInt (1024.0f * (float) plateCrop.getHeight()
+                                                 / (float) plateCrop.getWidth()));
+    else
+        setSize (820, 500);
 
     // License overlay sits on top of everything; it shows itself until activated.
     addChildComponent (licenseOverlay);
@@ -291,28 +300,84 @@ void VocalCompEditor::timerCallback()
         presetBox.setSelectedId (cur + 1, juce::dontSendNotification);
 
     if (chassisImg.isValid())
-        repaint();   // meter fills, slider fills, pills + ring wedges live in paintPlate
+    {
+        // dirty-region repaints: only invalidate what actually changed this tick
+        using namespace plategeo;
+        // radius fractions are of image WIDTH; vertical extents need the aspect factor
+        const float ar = (float) chassisImg.getWidth() / (float) chassisImg.getHeight();
+
+        struct TrackRegion { juce::Slider* s; juce::Rectangle<int> rect; };
+        const TrackRegion tracks[] = {
+            { &threshSlider,  plateFracRect (threshCx - vFillHalfW, vSlY0,
+                                             vFillHalfW * 2.0f, vSlY1 - vSlY0) },
+            { &gainSlider,    plateFracRect (gainCx - vFillHalfW, vSlY0,
+                                             vFillHalfW * 2.0f, vSlY1 - vSlY0) },
+            { &attackSlider,  plateFracRect (hX0, attackCy - hFillHalfH,
+                                             hX1 - hX0, hFillHalfH * 2.0f) },
+            { &releaseSlider, plateFracRect (hX0, releaseCy - hFillHalfH,
+                                             hX1 - hX0, hFillHalfH * 2.0f) },
+        };
+        struct RingRegion { juce::Slider* s; float cx; };
+        const RingRegion rings[] = {
+            { &gateKnob, gateCx }, { &mixKnob, mixCx }, { &trimKnob, trimCx },
+        };
+        for (size_t i = 0; i < 4; ++i)
+        {
+            const double v = tracks[i].s->getValue();
+            if (v != shownVal[i])
+            {
+                shownVal[i] = v;
+                repaint (tracks[i].rect.expanded (2));
+            }
+        }
+        for (size_t i = 0; i < 3; ++i)
+        {
+            const double v = rings[i].s->getValue();
+            if (v != shownVal[4 + i])
+            {
+                shownVal[4 + i] = v;
+                repaint (plateFracRect (rings[i].cx - ringMaxR, knobCy - ringMaxR * ar,
+                                        ringMaxR * 2.0f, ringMaxR * 2.0f * ar).expanded (2));
+            }
+        }
+        if (mode != shownMode)
+        {
+            shownMode = mode;
+            repaint (plateFracRect (pillX[0][0], pillY0,
+                                    pillX[2][1] - pillX[0][0], pillY1 - pillY0)
+                         .expanded (juce::roundToInt ((float) getWidth() * 0.010f) + 2));
+        }
+
+        // the IN / OUT meter fills animate continuously — repaint only their columns
+        repaint (plateFracRect (inLCx - mHalfW, mY0,
+                                (inRCx - inLCx) + mHalfW * 2.0f, mY1 - mY0).expanded (2));
+        repaint (plateFracRect (outLCx - mHalfW, mY0,
+                                (outRCx - outLCx) + mHalfW * 2.0f, mY1 - mY0).expanded (2));
+    }
 }
 
 //==============================================================================
+// plategeo fractions are of the FULL generated canvas; the window shows only
+// the plateCrop region, so map full-canvas fraction -> cropped screen px.
 juce::Rectangle<int> VocalCompEditor::plateFracRect (float fx, float fy, float fw, float fh) const
 {
-    return juce::Rectangle<float> (fx * (float) getWidth(),  fy * (float) getHeight(),
-                                   fw * (float) getWidth(),  fh * (float) getHeight())
-               .toNearestInt();
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+    const float sy = (float) getHeight() / (float) plateCrop.getHeight();
+    return juce::Rectangle<float> ((fx * iw - (float) plateCrop.getX()) * sx,
+                                   (fy * ih - (float) plateCrop.getY()) * sy,
+                                   fw * iw * sx,
+                                   fh * ih * sy).toNearestInt();
 }
 
-// Blit the matching region of the lit plate over the base plate — pixel
-// registration is guaranteed because both images share the same canvas.
+// Blit the matching region of the lit plate over the base plate. Both scaled
+// caches share the editor's coordinate space, so this is a 1:1 copy — cheap,
+// and registration is exact by construction.
 void VocalCompEditor::maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect)
 {
-    const float iw = (float) chassisOnImg.getWidth(), ih = (float) chassisOnImg.getHeight();
-    g.drawImage (chassisOnImg,
+    g.drawImage (plateOnScaled,
                  screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight(),
-                 juce::roundToInt (((float) screenRect.getX()      / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getY()      / (float) getHeight()) * ih),
-                 juce::roundToInt (((float) screenRect.getWidth()  / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getHeight() / (float) getHeight()) * ih));
+                 screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight());
 }
 
 // Same reveal but with a soft alpha ramp along the rect border, so the slight
@@ -349,11 +414,15 @@ void VocalCompEditor::maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<in
 void VocalCompEditor::drawRingWedge (juce::Graphics& g, juce::Slider& s, float cxFrac, float cyFrac,
                                      float domeRFrac, float solidRFrac, float maxRFrac)
 {
-    const float W = (float) getWidth();
-    const juce::Point<float> c (cxFrac * W, cyFrac * (float) getHeight());
-    const float domeR  = domeRFrac  * W;
-    const float solidR = solidRFrac * W;
-    const float R      = maxRFrac   * W;
+    // fractions are of the full canvas; convert through the crop mapping
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth() / (float) plateCrop.getWidth();
+    const juce::Point<float> c ((cxFrac * iw - (float) plateCrop.getX()) * sx,
+                                (cyFrac * ih - (float) plateCrop.getY())
+                                    * (float) getHeight() / (float) plateCrop.getHeight());
+    const float domeR  = domeRFrac  * iw * sx;
+    const float solidR = solidRFrac * iw * sx;
+    const float R      = maxRFrac   * iw * sx;
 
     const float prop = juce::jlimit (0.0f, 1.0f,
                                      (float) s.valueToProportionOfLength (s.getValue()));
@@ -377,27 +446,37 @@ void VocalCompEditor::drawRingWedge (juce::Graphics& g, juce::Slider& s, float c
         g.restoreState();
     };
 
-    const float feather = full ? 0.0f : juce::jmin (0.22f, (a1 - a0) * 0.5f);
+    // both ends of the arc are feathered so there is never a hard radial cut:
+    // fIn fades the start (6 o'clock) in, fOut fades the leading edge out. At
+    // full value the ring is a seamless uninterrupted annulus.
+    const float span = a1 - a0;
+    const float fOut = full ? 0.0f : juce::jmin (0.22f, span * 0.40f);
+    const float fIn  = full ? 0.0f : juce::jmin (0.10f, span * 0.20f);
     const float aEnd = full ? a0 + juce::MathConstants<float>::twoPi : a1;
 
-    wedge (a0, aEnd - feather, domeR, solidR, 1.0f);
+    wedge (a0 + fIn, aEnd - fOut, domeR, solidR, 1.0f);
     constexpr int aSteps = 10;
     for (int i = 0; i < aSteps; ++i)
-        wedge (aEnd - feather * (1.0f - (float) i / aSteps),
-               aEnd - feather * (1.0f - (float) (i + 1) / aSteps),
-               domeR, solidR,
-               1.0f - ((float) i + 0.5f) / aSteps);
+    {
+        const float t0 = (float) i / aSteps, t1 = (float) (i + 1) / aSteps;
+        // leading edge fade-out
+        wedge (aEnd - fOut * (1.0f - t0), aEnd - fOut * (1.0f - t1),
+               domeR, solidR, 1.0f - (t0 + t1) * 0.5f);
+        // start edge fade-in
+        wedge (a0 + fIn * t0, a0 + fIn * t1,
+               domeR, solidR, (t0 + t1) * 0.5f);
+    }
 
-    const float sf = full ? 0.0f : juce::jmin (0.14f, (a1 - a0) * 0.25f);
+    // outer bloom band, faded radially and softened at both angular ends
     constexpr int rSteps = 4;
     for (int i = 0; i < rSteps; ++i)
     {
         const float alpha = 0.85f * (1.0f - ((float) i + 0.5f) / rSteps);
         const float rIn  = solidR + (R - solidR) * (float) i / rSteps;
         const float rOut = solidR + (R - solidR) * (float) (i + 1) / rSteps;
-        wedge (a0 + sf, aEnd - feather * 0.5f, rIn, rOut, alpha);
-        wedge (a0,             a0 + sf * 0.5f, rIn, rOut, alpha * 0.33f);
-        wedge (a0 + sf * 0.5f, a0 + sf,        rIn, rOut, alpha * 0.66f);
+        wedge (a0 + fIn, aEnd - fOut * 0.5f, rIn, rOut, alpha);
+        wedge (a0,            a0 + fIn * 0.5f, rIn, rOut, alpha * 0.33f);
+        wedge (a0 + fIn * 0.5f, a0 + fIn,      rIn, rOut, alpha * 0.66f);
     }
 }
 
@@ -405,8 +484,32 @@ void VocalCompEditor::paintPlate (juce::Graphics& g)
 {
     using namespace plategeo;
 
-    g.drawImage (chassisImg, getLocalBounds().toFloat(),
-                 juce::RectanglePlacement::stretchToFit);
+    g.drawImageAt (plateScaled, 0, 0);   // cached 1:1 blit — no per-frame rescale
+
+    // Reveal a filled track with a soft alpha ramp at its leading end (edge:
+    // 0 = fill ends at the rect's top, 1 = at its right) so there's never a
+    // hard cut where the lit fill stops.
+    auto fillFeathered = [&] (juce::Rectangle<int> r, int edge)
+    {
+        constexpr int n = 4;
+        const int f = juce::jmin ((edge == 0 ? r.getHeight() : r.getWidth()) / 2,
+                                  juce::roundToInt ((float) getWidth() * 0.008f));
+        if (f <= 1) { maskFromOn (g, r); return; }
+        maskFromOn (g, edge == 0 ? r.withTrimmedTop (f) : r.withTrimmedRight (f));
+        const float step = (float) f / (float) n;
+        for (int i = 0; i < n; ++i)   // i = 0 is the outermost, faintest band
+        {
+            const int a = juce::roundToInt (step * (float) i);
+            const int b = juce::roundToInt (step * (float) (i + 1));
+            const auto band = (edge == 0)
+                ? juce::Rectangle<int> (r.getX(), r.getY() + a, r.getWidth(), b - a)
+                : juce::Rectangle<int> (r.getRight() - b, r.getY(), b - a, r.getHeight());
+            g.saveState();
+            g.setOpacity (((float) i + 0.5f) / (float) n);
+            maskFromOn (g, band);
+            g.restoreState();
+        }
+    };
 
     // ---- active mode pill lights up (ON plate has all three lit)
     if (auto* pm = proc.apvts.getRawParameterValue ("mode"))
@@ -431,8 +534,8 @@ void VocalCompEditor::paintPlate (juce::Graphics& g)
         const float pr = propOf (*s);
         if (pr <= 0.004f) continue;
         const float yTop = vSlY1 - pr * (vSlY1 - vSlY0);
-        maskFromOn (g, plateFracRect (cx - vFillHalfW, yTop,
-                                      vFillHalfW * 2.0f, vSlY1 - yTop));
+        fillFeathered (plateFracRect (cx - vFillHalfW, yTop,
+                                      vFillHalfW * 2.0f, vSlY1 - yTop), 0);
     }
 
     // ---- meter channels: bottom-up pink fill
@@ -454,8 +557,8 @@ void VocalCompEditor::paintPlate (juce::Graphics& g)
     {
         const float pr = propOf (*s);
         if (pr <= 0.004f) continue;
-        maskFromOn (g, plateFracRect (hX0, cy - hFillHalfH,
-                                      (hX1 - hX0) * pr, hFillHalfH * 2.0f));
+        fillFeathered (plateFracRect (hX0, cy - hFillHalfH,
+                                      (hX1 - hX0) * pr, hFillHalfH * 2.0f), 1);
     }
 
     // ---- gate / mix / trim neon ring wedges
@@ -535,34 +638,43 @@ void VocalCompEditor::resized()
     if (chassisImg.isValid())
     {
         using namespace plategeo;
-        const float W = (float) getWidth();
-        const float H = (float) getHeight();
+
+        // rebuild the scaled plate caches for the new size (1:1 blits per frame)
+        plateScaled   = skin::renderPlate (chassisImg,   plateCrop, getWidth(), getHeight());
+        plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop, getWidth(), getHeight());
+
+        // plategeo fractions are of the full canvas; map through the crop
+        const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+        const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+        const float sy = (float) getHeight() / (float) plateCrop.getHeight();
+        auto X = [&] (float fx) { return (fx * iw - (float) plateCrop.getX()) * sx; };
+        auto Y = [&] (float fy) { return (fy * ih - (float) plateCrop.getY()) * sy; };
 
         auto knobRect = [&] (float cx, float cy, float sideFracW)
         {
-            const int side = juce::roundToInt (sideFracW * W);
-            return juce::Rectangle<int> (juce::roundToInt (cx * W) - side / 2,
-                                         juce::roundToInt (cy * H) - side / 2,
+            const int side = juce::roundToInt (sideFracW * iw * sx);
+            return juce::Rectangle<int> (juce::roundToInt (X (cx)) - side / 2,
+                                         juce::roundToInt (Y (cy)) - side / 2,
                                          side, side);
         };
 
         // vertical sliders: bounds sized so the JUCE thumb travel (inset by
         // the fixed 12px V4 thumb radius) matches the baked groove exactly
         const int tr = 12;   // LookAndFeel_V4 thumb radius (jmin 12)
-        threshSlider.setBounds (juce::roundToInt (threshCx * W - 14.0f),
-                                juce::roundToInt (vSlY0 * H) - tr,
-                                28, juce::roundToInt ((vSlY1 - vSlY0) * H) + tr * 2);
-        gainSlider.setBounds   (juce::roundToInt (gainCx * W - 14.0f),
-                                juce::roundToInt (vSlY0 * H) - tr,
-                                28, juce::roundToInt ((vSlY1 - vSlY0) * H) + tr * 2);
+        threshSlider.setBounds (juce::roundToInt (X (threshCx) - 14.0f),
+                                juce::roundToInt (Y (vSlY0)) - tr,
+                                28, juce::roundToInt ((vSlY1 - vSlY0) * ih * sy) + tr * 2);
+        gainSlider.setBounds   (juce::roundToInt (X (gainCx) - 14.0f),
+                                juce::roundToInt (Y (vSlY0)) - tr,
+                                28, juce::roundToInt ((vSlY1 - vSlY0) * ih * sy) + tr * 2);
 
         // attack / release horizontal sliders
-        attackSlider.setBounds  (juce::roundToInt (hX0 * W) - tr,
-                                 juce::roundToInt (attackCy * H - 13.0f),
-                                 juce::roundToInt ((hX1 - hX0) * W) + tr * 2, 26);
-        releaseSlider.setBounds (juce::roundToInt (hX0 * W) - tr,
-                                 juce::roundToInt (releaseCy * H - 13.0f),
-                                 juce::roundToInt ((hX1 - hX0) * W) + tr * 2, 26);
+        attackSlider.setBounds  (juce::roundToInt (X (hX0)) - tr,
+                                 juce::roundToInt (Y (attackCy) - 13.0f),
+                                 juce::roundToInt ((hX1 - hX0) * iw * sx) + tr * 2, 26);
+        releaseSlider.setBounds (juce::roundToInt (X (hX0)) - tr,
+                                 juce::roundToInt (Y (releaseCy) - 13.0f),
+                                 juce::roundToInt ((hX1 - hX0) * iw * sx) + tr * 2, 26);
 
         // live values above the grooves (captions are baked)
         threshVal.setBounds (plateFracRect (threshCx - 0.055f, valY0, 0.110f, valY1 - valY0));

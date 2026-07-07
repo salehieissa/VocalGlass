@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 // Photoreal UI skin loader (shared by all plugins).
 //
@@ -186,6 +187,64 @@ namespace skin
         blit (L, T, cX, cY,             dx + rL, dy + rT, dCX, dCY);
 
         g.restoreState();
+    }
+
+    // Bounding box (in image px) of the bright plate — the chrome edge of a
+    // baked chassis, excluding the dark studio backdrop the generators leave
+    // around it. Used to crop the plate to fill the editor window edge-to-edge.
+    inline juce::Rectangle<int> plateBounds (const juce::Image& img)
+    {
+        if (! img.isValid()) return {};
+        const juce::Image::BitmapData bd (img, juce::Image::BitmapData::readOnly);
+        const int w = img.getWidth(), h = img.getHeight();
+        std::vector<int> colHits ((size_t) w, 0), rowHits ((size_t) h, 0);
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x)
+            {
+                const auto c = bd.getPixelColour (x, y);
+                if ((c.getRed() + c.getGreen() + c.getBlue()) / 3 > 90)
+                    { ++colHits[(size_t) x]; ++rowHits[(size_t) y]; }
+            }
+        int x0 = 0, x1 = w - 1, y0 = 0, y1 = h - 1;
+        // a plate edge column/row is bright for most of its length; backdrop
+        // columns with a stray bright reflection must not count
+        const int colThresh = h / 3, rowThresh = w / 3;
+        while (x0 < x1 && colHits[(size_t) x0] < colThresh) ++x0;
+        while (x1 > x0 && colHits[(size_t) x1] < colThresh) --x1;
+        while (y0 < y1 && rowHits[(size_t) y0] < rowThresh) ++y0;
+        while (y1 > y0 && rowHits[(size_t) y1] < rowThresh) --y1;
+        return { x0, y0, x1 - x0 + 1, y1 - y0 + 1 };
+    }
+
+    // Render the cropped plate region scaled to exactly `w`x`h`, then repaint
+    // the plate's rounded-corner backdrop slivers a soft white so the window
+    // never shows the dark studio background. Built once per resize and blitted
+    // 1:1 every frame (rescaling a 2048px plate every paint is the main UI cost).
+    inline juce::Image renderPlate (const juce::Image& img, juce::Rectangle<int> crop,
+                                    int w, int h)
+    {
+        juce::Image out (juce::Image::ARGB, juce::jmax (1, w), juce::jmax (1, h), true);
+        {
+            juce::Graphics g (out);
+            g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+            g.drawImage (img, 0, 0, w, h,
+                         crop.getX(), crop.getY(), crop.getWidth(), crop.getHeight());
+        }
+        const int m = juce::jmax (2, juce::jmin (w, h) / 16);
+        const juce::Colour white (0xfff6f6f7);
+        juce::Image::BitmapData bd (out, juce::Image::BitmapData::readWrite);
+        auto fixCorner = [&] (int cx0, int cy0)
+        {
+            for (int y = cy0; y < cy0 + m; ++y)
+                for (int x = cx0; x < cx0 + m; ++x)
+                {
+                    const auto c = bd.getPixelColour (x, y);
+                    if ((c.getRed() + c.getGreen() + c.getBlue()) / 3 < 80)
+                        bd.setPixelColour (x, y, white);
+                }
+        };
+        fixCorner (0, 0); fixCorner (w - m, 0); fixCorner (0, h - m); fixCorner (w - m, h - m);
+        return out;
     }
 
     // Crop a knob sprite to a square hugging its dome. domeCx is a fraction of

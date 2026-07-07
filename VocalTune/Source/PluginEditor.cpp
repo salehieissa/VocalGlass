@@ -34,9 +34,11 @@ namespace plategeo
     constexpr float rstX0 = 0.5884f, rstY0 = 0.4890f;
     constexpr float rstX1 = 0.6235f, rstY1 = 0.5419f;
 
-    // keyboard (white-key extent of the GPT-drawn 15-white keyboard)
-    constexpr float kbX0 = 0.0641f, kbY0 = 0.5574f;
-    constexpr float kbX1 = 0.6187f, kbY1 = 0.7426f;
+    // keyboard (white-key extent of the GPT-drawn 15-white keyboard).
+    // Vertical span covers the keys' neon rims (image y 750..1017) and MUST
+    // match PlateKeyboard's kY0/kY1 or the key masks skew.
+    constexpr float kbX0 = 0.0641f, kbY0 = 0.5515f;
+    constexpr float kbX1 = 0.6187f, kbY1 = 0.7478f;
 
     // detune: bold readout text (no capsule in this art) + small knob
     constexpr float detValX0 = 0.0640f, detValY0 = 0.7897f;
@@ -188,10 +190,28 @@ VocalTuneEditor::VocalTuneEditor (VocalTuneProcessor& p)
     setCap (humanizeLabel, "humanize");
     setCap (flexLabel,     "flex tune");
 
-    configureKnob (retuneKnob,   "retuneSpeed", retuneAtt);
-    // Retune speed: 0 = hardest/fastest. Show that as a FULL ring on the right
-    // and empty it as the value rises toward a looser, more natural glide.
-    retuneKnob.setInvertedFill (true);
+    // Retune speed reads as a "speed amount": all the way RIGHT = 0 ms =
+    // hardest/fastest, shown as a full ring. The knob therefore runs inverted
+    // relative to the parameter so pointer, drag direction and lit ring agree.
+    {
+        auto* prm = proc.apvts.getParameter ("retuneSpeed");
+        const auto range = proc.apvts.getParameterRange ("retuneSpeed");
+        const float lo = range.start, hi = range.end;
+        retuneKnob.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        retuneKnob.setRange (lo, hi, range.interval);
+        retunePAtt = std::make_unique<juce::ParameterAttachment> (*prm,
+            [this, lo, hi] (float v)
+            { retuneKnob.setValue (hi + lo - v, juce::dontSendNotification); });
+        retunePAtt->sendInitialUpdate();
+        retuneKnob.onDragStart = [this] { retuneDragging = true; retunePAtt->beginGesture(); };
+        retuneKnob.onDragEnd   = [this] { retunePAtt->endGesture(); retuneDragging = false; };
+        retuneKnob.onValueChange = [this, lo, hi]
+        {
+            const float pv = hi + lo - (float) retuneKnob.getValue();
+            if (retuneDragging) retunePAtt->setValueAsPartOfGesture (pv);
+            else                retunePAtt->setValueAsCompleteGesture (pv);
+        };
+    }
     configureKnob (humanizeKnob, "humanize",    humanizeAtt);
     configureKnob (flexKnob,     "flexTune",    flexAtt);
     addAndMakeVisible (retuneKnob);
@@ -245,7 +265,13 @@ VocalTuneEditor::VocalTuneEditor (VocalTuneProcessor& p)
         setupPlateMode();
 
     startTimerHz (30);
-    setSize (1024, plateBaked ? 680 : 640);
+    // plate mode: the window shows ONLY the plate (cropped at the chrome edge)
+    // and must match the crop's aspect exactly
+    if (plateBaked)
+        setSize (1024, juce::roundToInt (1024.0f * (float) plateCrop.getHeight()
+                                                 / (float) plateCrop.getWidth()));
+    else
+        setSize (1024, 640);
 
     // License overlay sits on top of everything; it shows itself until activated.
     addChildComponent (licenseOverlay);
@@ -264,6 +290,7 @@ VocalTuneEditor::~VocalTuneEditor()
 void VocalTuneEditor::setupPlateMode()
 {
     using namespace plategeo;
+    plateCrop = skin::plateBounds (chassisImg);
 
     // captions, wordmark, tick ruler, pill texts: all baked
     for (auto* l : { &vrLabel, &keyLabel, &ksLabel, &editNotesLabel, &detuneLabel,
@@ -377,8 +404,63 @@ void VocalTuneEditor::timerCallback()
         livePitch = proc.hasPitch();
         const float target = juce::jlimit (-100.0f, 100.0f, proc.getDetectedCents());
         liveCents += (target - liveCents) * 0.35f;
-        keyboard.refresh();
-        repaint();   // lit masks + ring wedges live in paintPlate
+        keyboard.refresh();   // repaints only when the note set changed
+
+        // dirty-region repaints: only invalidate what changed this tick
+        using namespace plategeo;
+        const float ar = (float) chassisImg.getWidth() / (float) chassisImg.getHeight();
+        auto ringBox = [&] (float cx, float cy, float maxR)
+        {
+            return plateFracRect (cx - maxR, cy - maxR * ar, cx + maxR, cy + maxR * ar)
+                       .expanded (2);
+        };
+        struct { juce::Slider* s; float cx, cy, maxR; } knobs[] = {
+            { &retuneKnob,   heroCx, heroCy, heroMaxR },
+            { &humanizeKnob, humCx,  humCy,  smallMaxR },
+            { &flexKnob,     flexCx, flexCy, smallMaxR },
+            { &detuneKnob,   detCx,  detCy,  detMaxR },
+        };
+        for (size_t i = 0; i < 4; ++i)
+        {
+            const double v = knobs[i].s->getValue();
+            if (v != shownKnob[i])
+            {
+                shownKnob[i] = v;
+                repaint (ringBox (knobs[i].cx, knobs[i].cy, knobs[i].maxR));
+            }
+        }
+
+        // cents meter block moves while pitch is live
+        if (livePitch || livePitch != shownPitch || std::abs (liveCents - shownCents) > 0.05f)
+        {
+            shownPitch = livePitch; shownCents = liveCents;
+            repaint (plateFracRect (metX0, metY0, metX1, metY1).expanded (4));
+        }
+
+        const int mode = proc.apvts.getRawParameterValue ("hq")->load() > 0.5f ? 1 : 0;
+        if (mode != shownMode)
+        {
+            shownMode = mode;
+            repaint (plateFracRect (modeX0, modeY0, modeX1, modeY1).expanded (12));
+        }
+        const bool modern = modernSwitch.getToggleState();
+        if (modern != shownModern)
+        {
+            shownModern = modern;
+            repaint (plateFracRect (togX0, togY0, togX1, togY1).expanded (12));
+        }
+        const bool power = proc.apvts.getRawParameterValue ("power")->load() > 0.5f;
+        juce::Button* bot[4] = { &undoBtn, &redoBtn, &gearBtn, &powerBtn };
+        for (int i = 0; i < 4; ++i)
+        {
+            const bool lit = (i == 3) ? power : bot[i]->isDown();
+            if (lit != shownBtnDown[i])
+            {
+                shownBtnDown[i] = lit;
+                repaint (plateFracRect (botCx[i] - botMaskR, botCy - botMaskR * ar,
+                                        botCx[i] + botMaskR, botCy + botMaskR * ar).expanded (8));
+            }
+        }
     }
 
     presetName.setText (proc.getProgramName (proc.getCurrentProgram()), juce::dontSendNotification);
@@ -472,24 +554,27 @@ void VocalTuneEditor::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+// plategeo fractions are of the FULL generated canvas; the window shows only
+// the plateCrop region, so map full-canvas fraction -> cropped screen px.
 juce::Rectangle<int> VocalTuneEditor::plateFracRect (float fx0, float fy0, float fx1, float fy1) const
 {
-    const float W = (float) getWidth(), H = (float) getHeight();
-    return juce::Rectangle<float> (fx0 * W, fy0 * H, (fx1 - fx0) * W, (fy1 - fy0) * H)
-               .toNearestInt();
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+    const float sy = (float) getHeight() / (float) plateCrop.getHeight();
+    return juce::Rectangle<float> ((fx0 * iw - (float) plateCrop.getX()) * sx,
+                                   (fy0 * ih - (float) plateCrop.getY()) * sy,
+                                   (fx1 - fx0) * iw * sx,
+                                   (fy1 - fy0) * ih * sy).toNearestInt();
 }
 
-// Blit the matching region of the lit plate over the base plate — pixel
-// registration is guaranteed because both images share the same canvas.
+// Blit the matching region of the lit plate over the base plate. Both scaled
+// caches share the editor's coordinate space, so this is a cheap 1:1 copy and
+// registration is exact by construction.
 void VocalTuneEditor::maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect)
 {
-    const float iw = (float) chassisOnImg.getWidth(), ih = (float) chassisOnImg.getHeight();
-    g.drawImage (chassisOnImg,
+    g.drawImage (plateOnScaled,
                  screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight(),
-                 juce::roundToInt (((float) screenRect.getX()      / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getY()      / (float) getHeight()) * ih),
-                 juce::roundToInt (((float) screenRect.getWidth()  / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getHeight() / (float) getHeight()) * ih));
+                 screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight());
 }
 
 // Same reveal but with a soft alpha ramp along the rect border, so the slight
@@ -526,11 +611,15 @@ void VocalTuneEditor::maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<in
 void VocalTuneEditor::drawRingWedge (juce::Graphics& g, juce::Slider& s, float cxFrac, float cyFrac,
                                      float domeRFrac, float solidRFrac, float maxRFrac, bool inverted)
 {
-    const float W = (float) getWidth();
-    const juce::Point<float> c (cxFrac * W, cyFrac * (float) getHeight());
-    const float domeR  = domeRFrac  * W;
-    const float solidR = solidRFrac * W;
-    const float R      = maxRFrac   * W;
+    // fractions are of the full canvas; convert through the crop mapping
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth() / (float) plateCrop.getWidth();
+    const juce::Point<float> c ((cxFrac * iw - (float) plateCrop.getX()) * sx,
+                                (cyFrac * ih - (float) plateCrop.getY())
+                                    * (float) getHeight() / (float) plateCrop.getHeight());
+    const float domeR  = domeRFrac  * iw * sx;
+    const float solidR = solidRFrac * iw * sx;
+    const float R      = maxRFrac   * iw * sx;
 
     float prop = juce::jlimit (0.0f, 1.0f,
                                (float) s.valueToProportionOfLength (s.getValue()));
@@ -555,27 +644,34 @@ void VocalTuneEditor::drawRingWedge (juce::Graphics& g, juce::Slider& s, float c
         g.restoreState();
     };
 
-    const float feather = full ? 0.0f : juce::jmin (0.22f, (a1 - a0) * 0.5f);
+    // both ends of the arc are feathered so there is never a hard radial cut:
+    // fIn fades the start (6 o'clock) in, fOut fades the leading edge out. At
+    // full value the ring is a seamless uninterrupted annulus.
+    const float span = a1 - a0;
+    const float fOut = full ? 0.0f : juce::jmin (0.22f, span * 0.40f);
+    const float fIn  = full ? 0.0f : juce::jmin (0.10f, span * 0.20f);
     const float aEnd = full ? a0 + juce::MathConstants<float>::twoPi : a1;
 
-    wedge (a0, aEnd - feather, domeR, solidR, 1.0f);
+    wedge (a0 + fIn, aEnd - fOut, domeR, solidR, 1.0f);
     constexpr int aSteps = 10;
     for (int i = 0; i < aSteps; ++i)
-        wedge (aEnd - feather * (1.0f - (float) i / aSteps),
-               aEnd - feather * (1.0f - (float) (i + 1) / aSteps),
-               domeR, solidR,
-               1.0f - ((float) i + 0.5f) / aSteps);
+    {
+        const float t0 = (float) i / aSteps, t1 = (float) (i + 1) / aSteps;
+        wedge (aEnd - fOut * (1.0f - t0), aEnd - fOut * (1.0f - t1),
+               domeR, solidR, 1.0f - (t0 + t1) * 0.5f);
+        wedge (a0 + fIn * t0, a0 + fIn * t1,
+               domeR, solidR, (t0 + t1) * 0.5f);
+    }
 
-    const float sf = full ? 0.0f : juce::jmin (0.14f, (a1 - a0) * 0.25f);
     constexpr int rSteps = 4;
     for (int i = 0; i < rSteps; ++i)
     {
         const float alpha = 0.85f * (1.0f - ((float) i + 0.5f) / rSteps);
         const float rIn  = solidR + (R - solidR) * (float) i / rSteps;
         const float rOut = solidR + (R - solidR) * (float) (i + 1) / rSteps;
-        wedge (a0 + sf, aEnd - feather * 0.5f, rIn, rOut, alpha);
-        wedge (a0,             a0 + sf * 0.5f, rIn, rOut, alpha * 0.33f);
-        wedge (a0 + sf * 0.5f, a0 + sf,        rIn, rOut, alpha * 0.66f);
+        wedge (a0 + fIn, aEnd - fOut * 0.5f, rIn, rOut, alpha);
+        wedge (a0,             a0 + fIn * 0.5f, rIn, rOut, alpha * 0.33f);
+        wedge (a0 + fIn * 0.5f, a0 + fIn,       rIn, rOut, alpha * 0.66f);
     }
 }
 
@@ -583,8 +679,7 @@ void VocalTuneEditor::paintPlate (juce::Graphics& g)
 {
     using namespace plategeo;
 
-    g.drawImage (chassisImg, getLocalBounds().toFloat(),
-                 juce::RectanglePlacement::stretchToFit);
+    g.drawImageAt (plateScaled, 0, 0);   // cached 1:1 blit — no per-frame rescale
 
     const int feather = juce::roundToInt ((float) getWidth() * 0.008f);
 
@@ -627,8 +722,9 @@ void VocalTuneEditor::paintPlate (juce::Graphics& g)
         g.restoreState();
     }
 
-    // ---- knob neon ring wedges
-    drawRingWedge (g, retuneKnob,   heroCx, heroCy, heroDomeR, heroSolidR, heroMaxR, true);
+    // ---- knob neon ring wedges (retune's inversion lives in its value
+    //      mapping now, so every ring draws the plain slider proportion)
+    drawRingWedge (g, retuneKnob,   heroCx, heroCy, heroDomeR, heroSolidR, heroMaxR, false);
     drawRingWedge (g, humanizeKnob, humCx,  humCy,  smallDomeR, smallSolidR, smallMaxR, false);
     drawRingWedge (g, flexKnob,     flexCx, flexCy, smallDomeR, smallSolidR, smallMaxR, false);
     drawRingWedge (g, detuneKnob,   detCx,  detCy,  detDomeR,  detSolidR,  detMaxR,  false);
@@ -637,11 +733,18 @@ void VocalTuneEditor::paintPlate (juce::Graphics& g)
 void VocalTuneEditor::layoutPlate()
 {
     using namespace plategeo;
+
+    // rebuild the scaled plate caches for the new size (1:1 blits per frame)
+    plateScaled   = skin::renderPlate (chassisImg,   plateCrop, getWidth(), getHeight());
+    plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop, getWidth(), getHeight());
+
     auto fr = [this] (float fx0, float fy0, float fx1, float fy1)
     {
         return plateFracRect (fx0, fy0, fx1, fy1);
     };
-    const float W = (float) getWidth();
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+    const float sy = (float) getHeight() / (float) plateCrop.getHeight();
 
     // header
     vocalRange.setBounds (fr (vrX0, headY0, vrX1, headY1));
@@ -667,9 +770,10 @@ void VocalTuneEditor::layoutPlate()
     // knobs: bounds are a square around the dome (sprite crop pads by 1.06)
     auto domeSquare = [&] (float cx, float cy, float diaFrac)
     {
-        const float side = diaFrac * W * 1.06f;
-        return juce::Rectangle<float> (cx * W - side * 0.5f,
-                                       cy * (float) getHeight() - side * 0.5f,
+        const float side = diaFrac * iw * sx * 1.06f;
+        const float px = (cx * iw - (float) plateCrop.getX()) * sx;
+        const float py = (cy * ih - (float) plateCrop.getY()) * sy;
+        return juce::Rectangle<float> (px - side * 0.5f, py - side * 0.5f,
                                        side, side).toNearestInt();
     };
     retuneKnob.setBounds   (domeSquare (heroCx, heroCy, heroDomeDia));

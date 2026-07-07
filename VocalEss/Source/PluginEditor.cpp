@@ -107,6 +107,8 @@ VocalEssEditor::VocalEssEditor (VocalEssProcessor& p)
     // render into the baked capsules.
     if (baked)
     {
+        plateCrop = skin::plateBounds (chassisImg);
+
         for (auto* b : { &splitBtn, &monAudio, &monSChain })
             b->setComponentID ("hit");
 
@@ -129,7 +131,13 @@ VocalEssEditor::VocalEssEditor (VocalEssProcessor& p)
     }
 
     startTimerHz (30);
-    setSize (baked ? 800 : 680, baked ? 531 : 500);
+    // plate mode: the window shows ONLY the plate (cropped at the chrome edge),
+    // and must match the crop's aspect exactly or baked circles get stretched
+    if (baked)
+        setSize (800, juce::roundToInt (800.0f * (float) plateCrop.getHeight()
+                                               / (float) plateCrop.getWidth()));
+    else
+        setSize (680, 500);
 
     // License overlay sits on top of everything; it shows itself until activated.
     addChildComponent (licenseOverlay);
@@ -191,28 +199,60 @@ void VocalEssEditor::timerCallback()
     updateBubble();
 
     if (chassisImg.isValid())
-        repaint();   // meter fills + lit pills live in paintPlate
+    {
+        // dirty-region repaints: only invalidate what actually changed this tick
+        using namespace plategeo;
+
+        if (splitBtn.getToggleState() != shownSplit)
+        {
+            shownSplit = splitBtn.getToggleState();
+            repaint (plateFracRect (splitRect[0], splitRect[1],
+                                    splitRect[2], splitRect[3]).expanded (12));
+        }
+        if (mon != shownMon)
+        {
+            shownMon = mon;
+            repaint (plateFracRect (audioRect[0], audioRect[1],
+                                    audioRect[2], audioRect[3]).expanded (12));
+            repaint (plateFracRect (schainRect[0], schainRect[1],
+                                    schainRect[2], schainRect[3]).expanded (12));
+        }
+        if (thresholdSlider.getValue() != shownThresh)
+        {
+            shownThresh = thresholdSlider.getValue();
+            repaint (plateFracRect (slCx - slHalfW, slY0,
+                                    slHalfW * 2.0f, slY1 - slY0).expanded (3));
+        }
+
+        // meters move continuously — repaint only their own channels every tick
+        for (const float cx : { scCx, attenCx, outLCx, outRCx })
+            repaint (plateFracRect (cx - mHalfW, mY0,
+                                    mHalfW * 2.0f, mY1 - mY0).expanded (2));
+    }
 }
 
 //==============================================================================
+// plategeo fractions are of the FULL generated canvas; the window shows only
+// the plateCrop region, so map full-canvas fraction -> cropped screen px.
 juce::Rectangle<int> VocalEssEditor::plateFracRect (float fx, float fy, float fw, float fh) const
 {
-    return juce::Rectangle<float> (fx * (float) getWidth(),  fy * (float) getHeight(),
-                                   fw * (float) getWidth(),  fh * (float) getHeight())
-               .toNearestInt();
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+    const float sy = (float) getHeight() / (float) plateCrop.getHeight();
+    return juce::Rectangle<float> ((fx * iw - (float) plateCrop.getX()) * sx,
+                                   (fy * ih - (float) plateCrop.getY()) * sy,
+                                   fw * iw * sx,
+                                   fh * ih * sy).toNearestInt();
 }
 
-// Blit the matching region of the lit plate over the base plate — pixel
-// registration is guaranteed because both images share the same canvas.
+// Blit the matching region of the lit plate over the base plate. Both scaled
+// caches share the editor's coordinate space, so this is a 1:1 copy — cheap,
+// and registration is exact by construction.
 void VocalEssEditor::maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect)
 {
-    const float iw = (float) chassisOnImg.getWidth(), ih = (float) chassisOnImg.getHeight();
-    g.drawImage (chassisOnImg,
+    g.drawImage (plateOnScaled,
                  screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight(),
-                 juce::roundToInt (((float) screenRect.getX()      / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getY()      / (float) getHeight()) * ih),
-                 juce::roundToInt (((float) screenRect.getWidth()  / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getHeight() / (float) getHeight()) * ih));
+                 screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight());
 }
 
 // Same reveal but with a soft alpha ramp along the rect border, so the slight
@@ -247,8 +287,7 @@ void VocalEssEditor::paintPlate (juce::Graphics& g)
 {
     using namespace plategeo;
 
-    g.drawImage (chassisImg, getLocalBounds().toFloat(),
-                 juce::RectanglePlacement::stretchToFit);
+    g.drawImageAt (plateScaled, 0, 0);   // cached 1:1 blit — no per-frame rescale
 
     const int fpx = juce::roundToInt ((float) getWidth() * 0.010f);
 
@@ -390,8 +429,14 @@ void VocalEssEditor::resized()
     if (chassisImg.isValid())
     {
         using namespace plategeo;
-        const float W = (float) getWidth();
-        const float H = (float) getHeight();
+
+        // rebuild the scaled plate caches for the new size (1:1 blits per frame)
+        plateScaled   = skin::renderPlate (chassisImg,   plateCrop, getWidth(), getHeight());
+        plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop, getWidth(), getHeight());
+
+        const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+        const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+        const float sy = (float) getHeight() / (float) plateCrop.getHeight();
 
         // pills + freq + sidechain: hit areas over the baked art
         splitBtn.setBounds  (plateFracRect (splitRect[0],  splitRect[1],  splitRect[2],  splitRect[3]));
@@ -403,12 +448,16 @@ void VocalEssEditor::resized()
 
         // threshold slider: bounds sized so the JUCE thumb travel (inset by
         // the fixed 12px V4 thumb radius) matches the baked groove exactly.
-        // Width (= drawn thumb dia) scales with the window.
+        // Width (= drawn thumb dia) scales with the window. All coordinates
+        // go through the crop mapping (fractions are of the full canvas).
         const int tr = 12;
-        const int sw = juce::roundToInt (0.0273f * W);
-        thresholdSlider.setBounds (juce::roundToInt (slCx * W) - sw / 2,
-                                   juce::roundToInt (slY0 * H) - tr,
-                                   sw, juce::roundToInt ((slY1 - slY0) * H) + tr * 2);
+        const int sw = juce::roundToInt (0.0273f * iw * sx);
+        const float cx = (slCx * iw - (float) plateCrop.getX()) * sx;
+        const float y0 = (slY0 * ih - (float) plateCrop.getY()) * sy;
+        const float y1 = (slY1 * ih - (float) plateCrop.getY()) * sy;
+        thresholdSlider.setBounds (juce::roundToInt (cx) - sw / 2,
+                                   juce::roundToInt (y0) - tr,
+                                   sw, juce::roundToInt (y1 - y0) + tr * 2);
 
         // readouts inside the baked capsules
         scValue.setBounds    (plateFracRect (scValCx    - 0.032f, readY0, 0.064f, readY1 - readY0));

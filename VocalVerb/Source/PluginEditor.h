@@ -89,6 +89,19 @@ private:
     juce::Image chassisImg, chassisOnImg;
     bool plateBaked = false;
 
+    // crop-to-chrome: the plate's bright bbox inside the generated canvas; the
+    // editor shows ONLY this region (backdrop never visible). Scaled copies are
+    // cached per resize so per-frame paints are 1:1 blits.
+    juce::Rectangle<int> plateCrop;
+    juce::Image plateScaled, plateOnScaled;
+
+    // dirty-region repaint bookkeeping (only repaint what changed each tick)
+    std::array<double, 15> shownKnob {};
+    std::array<juce::String, 15> shownKnobText;
+    bool shownBypass = false, shownPreSync = false, shownModSync = false;
+    bool shownPrevDown = false, shownNextDown = false;
+    juce::String shownMode, shownColor, shownPreset;
+
     using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
     using ComboAtt  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;

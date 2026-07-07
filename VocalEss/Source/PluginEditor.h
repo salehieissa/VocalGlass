@@ -61,6 +61,17 @@ private:
     // ---- baked photoreal plate ----
     juce::Image chassisImg, chassisOnImg;
 
+    // crop-to-chrome: the plate's bright bbox inside the generated canvas; the
+    // editor shows ONLY this region (backdrop never visible). Scaled copies are
+    // cached per resize so per-frame paints are 1:1 blits.
+    juce::Rectangle<int> plateCrop;
+    juce::Image plateScaled, plateOnScaled;
+
+    // dirty-region repaint bookkeeping (only repaint what changed each tick)
+    bool shownSplit = false;
+    int shownMon = -1;
+    double shownThresh = -1.0e9;
+
     juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const;
     void maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect);
     void maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<int> screenRect, int featherPx);

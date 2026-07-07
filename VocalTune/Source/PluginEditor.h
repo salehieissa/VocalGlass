@@ -87,6 +87,10 @@ private:
     RingKnob humanizeKnob { 3.5f, false };
     RingKnob flexKnob { 3.5f, false };
     std::unique_ptr<SliderAtt> retuneAtt, humanizeAtt, flexAtt;
+    // retune runs inverted vs the param (right = 0 ms = fastest), so it uses a
+    // hand-rolled attachment instead of a SliderAttachment
+    std::unique_ptr<juce::ParameterAttachment> retunePAtt;
+    bool retuneDragging = false;
     juce::Label retuneBox, humanizeBox, flexBox;
     ToggleSwitch modernSwitch;
     std::unique_ptr<ButtonAtt> modernAtt;
@@ -108,6 +112,19 @@ private:
     PlateKeyboard keyboard;
     float liveCents = 0.0f;
     bool  livePitch = false;
+
+    // crop-to-chrome: window shows only the plate's bright bbox; scaled copies
+    // are cached per resize so per-frame paints are 1:1 blits
+    juce::Rectangle<int> plateCrop;
+    juce::Image plateScaled, plateOnScaled;
+
+    // dirty-region repaint bookkeeping
+    std::array<double, 4> shownKnob {};
+    int  shownMode = -1;
+    bool shownModern = false, shownPower = false;
+    bool shownBtnDown[4] { false, false, false, false };
+    float shownCents = -999.0f;
+    bool  shownPitch = false;
 
     // Full-editor "enter your license key" overlay (shown until activated).
     ActivationOverlay licenseOverlay { proc.license, "VocalTune", "https://vocalessential.com",

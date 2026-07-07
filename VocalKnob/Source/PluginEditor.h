@@ -46,6 +46,16 @@ private:
     // plate is drawn full-bleed; lit states are masked from the ON plate.
     juce::Image chassisImg, chassisOnImg;
 
+    // crop-to-chrome: the plate's bright bbox inside the generated canvas; the
+    // editor shows ONLY this region (backdrop never visible). Scaled copies are
+    // cached per resize so per-frame paints are 1:1 blits.
+    juce::Rectangle<int> plateCrop;
+    juce::Image plateScaled, plateOnScaled;
+
+    // dirty-region repaint bookkeeping (only repaint what changed each tick)
+    double shownDial = -1.0e9;
+    int shownMode = -1;
+
     juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const;
     void maskFromOn (juce::Graphics&, juce::Rectangle<int> screenRect);
     void maskFromOnFeathered (juce::Graphics&, juce::Rectangle<int> screenRect, int featherPx);

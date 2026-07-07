@@ -11,6 +11,7 @@
 #include "ui/TopBarButton.h"
 #include "ui/ModRateControl.h"
 #include "../../common/Licensing/ActivationOverlay.h"
+#include <array>
 
 //==============================================================================
 class VocalDoublerEditor : public juce::AudioProcessorEditor,
@@ -41,6 +42,18 @@ private:
 
     juce::Image chassisImg, chassisOnImg;
     bool plateBaked = false;
+
+    // crop-to-chrome: the plate's bright bbox inside the generated canvas; the
+    // editor shows ONLY this region (backdrop never visible). Scaled copies are
+    // cached per resize so per-frame paints are 1:1 blits.
+    juce::Rectangle<int> plateCrop;
+    juce::Image plateScaled, plateOnScaled;
+
+    // dirty-region repaint bookkeeping (only repaint what changed each tick)
+    std::array<double, 2> shownKnob { -1.0e9, -1.0e9 };
+    bool shownBypass = false, shownTips = false, shownMenu = false;
+    bool shownFx = false, shownSync = false;
+    juce::String shownReadout, shownDiv;
 
     VocalDoublerProcessor& proc;
     KnobLookAndFeel laf;

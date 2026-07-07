@@ -11,6 +11,7 @@
 #include "ui/AirKnob.h"
 #include "../../common/Licensing/ActivationOverlay.h"
 #include "../../common/ui/Skin.h"
+#include <array>
 
 //==============================================================================
 class VocalAirEditor : public juce::AudioProcessorEditor,
@@ -74,6 +75,17 @@ private:
     // Baked photoreal plate pair (air-chassis / air-chassis-on). The OFF plate
     // is drawn full-bleed; lit states are masked from the ON plate.
     juce::Image chassisImg, chassisOnImg;
+
+    // crop-to-chrome: the plate's bright bbox inside the generated canvas; the
+    // editor shows ONLY this region (backdrop never visible). Scaled copies are
+    // cached per resize so per-frame paints are 1:1 blits.
+    juce::Rectangle<int> plateCrop;
+    juce::Image plateScaled, plateOnScaled;
+
+    // dirty-region repaint bookkeeping (only repaint what changed each tick)
+    std::array<double, 3> shownKnob { -1.0e9, -1.0e9, -1.0e9 };
+    int shownAB = -1;
+    bool shownLink = false, shownPower = false;
 
     juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const;
     void maskFromOn (juce::Graphics&, juce::Rectangle<int> screenRect);

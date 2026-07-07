@@ -17,8 +17,12 @@ public:
     {
         maxDb = juce::jmax (1.0f, rangeDb);
         const float t = juce::jlimit (0.0f, 1.0f, attenuationDb / maxDb);
-        // light smoothing for a calmer meter
-        smoothed = t > smoothed ? t : smoothed * 0.82f + t * 0.18f;
+        // light smoothing for a calmer meter (snap the tail to zero so the
+        // repaint loop stops once the fill is invisible)
+        float next = t > smoothed ? t : smoothed * 0.82f + t * 0.18f;
+        if (next < 1.0e-4f) next = 0.0f;
+        if (next == smoothed) return;
+        smoothed = next;
         repaint();
     }
 

@@ -75,6 +75,16 @@ private:
     juce::Image chassisImg, chassisOnImg;
     float inLDb = -60.0f, inRDb = -60.0f, outLDb = -60.0f, outRDb = -60.0f;
 
+    // crop-to-chrome: the plate's bright bbox inside the generated canvas; the
+    // editor shows ONLY this region (backdrop never visible). Scaled copies are
+    // cached per resize so per-frame paints are 1:1 blits.
+    juce::Rectangle<int> plateCrop;
+    juce::Image plateScaled, plateOnScaled;
+
+    // dirty-region repaint bookkeeping (only repaint what changed each tick)
+    std::array<double, 7> shownVal { -1.0e9, -1.0e9, -1.0e9, -1.0e9, -1.0e9, -1.0e9, -1.0e9 };
+    int shownMode = -1;
+
     juce::Rectangle<int> plateFracRect (float fx, float fy, float fw, float fh) const;
     void maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect);
     void maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<int> screenRect, int featherPx);

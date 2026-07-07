@@ -61,6 +61,8 @@ VocalAirEditor::VocalAirEditor (VocalAirProcessor& p)
     chassisOnImg = skin::image ("air-chassis-on@2x.png");
     const bool baked = chassisImg.isValid() && chassisOnImg.isValid();
     laf.plate = baked;
+    if (baked)
+        plateCrop = skin::plateBounds (chassisImg);
 
     // ---- branding ----
     // The wordmark, sub-tagline and display label are painted directly (two-tone
@@ -290,7 +292,14 @@ VocalAirEditor::VocalAirEditor (VocalAirProcessor& p)
     }
 
     startTimerHz (30);
-    setSize (1024, baked ? 680 : 640);
+    // plate mode: the window shows ONLY the plate (cropped at the chrome edge),
+    // and must match the crop's aspect exactly or circular dome sprites sit in
+    // vertically-stretched (elliptical) baked grooves
+    if (baked)
+        setSize (1024, juce::roundToInt (1024.0f * (float) plateCrop.getHeight()
+                                                 / (float) plateCrop.getWidth()));
+    else
+        setSize (1024, 640);
 
     // License overlay sits on top of everything; it shows itself until activated.
     addChildComponent (licenseOverlay);
@@ -360,29 +369,77 @@ void VocalAirEditor::timerCallback()
         const double tv = trimKnob.getValue();
         trimVal.setText ((tv > 0.049 ? "+" : "") + juce::String (tv, 1) + " dB",
                          juce::dontSendNotification);
-        repaint();   // meter arc, ring wedges + lit pills live in paintPlate
+
+        // dirty-region repaints: only invalidate what actually changed this tick
+        using namespace plategeo;
+        // radius fractions are of image WIDTH; vertical extents need the aspect factor
+        const float ar = (float) chassisImg.getWidth() / (float) chassisImg.getHeight();
+        auto ringBox = [&] (float cx, float cy, float maxR)
+        {
+            return plateFracRect (cx - maxR, cy - maxR * ar,
+                                  maxR * 2.0f, maxR * 2.0f * ar).expanded (2);
+        };
+        struct KnobRegion { juce::Slider* s; float cx, cy, maxR; };
+        const KnobRegion regions[] = {
+            { &midKnob,  ringLCx, ringCy, ringMaxR },
+            { &highKnob, ringRCx, ringCy, ringMaxR },
+            { &trimKnob, trimCx,  trimCy, trimMaxR },
+        };
+        for (size_t i = 0; i < 3; ++i)
+        {
+            const double v = regions[i].s->getValue();
+            if (v != shownKnob[i])
+            {
+                shownKnob[i] = v;
+                repaint (ringBox (regions[i].cx, regions[i].cy, regions[i].maxR));
+            }
+        }
+
+        const int fpx = juce::roundToInt ((float) getWidth() * 0.010f) + 2;
+        if (abSlot != shownAB)
+        {
+            shownAB = abSlot;
+            repaint (plateFracRect (aRect[0], aRect[1], aRect[2], aRect[3]).expanded (fpx));
+            repaint (plateFracRect (bRect[0], bRect[1], bRect[2], bRect[3]).expanded (fpx));
+        }
+        if (linkBtn.getToggleState() != shownLink)
+        {
+            shownLink = linkBtn.getToggleState();
+            repaint (plateFracRect (linkRect[0], linkRect[1], linkRect[2], linkRect[3]).expanded (fpx));
+        }
+        if (powerBtn.getToggleState() != shownPower)
+        {
+            shownPower = powerBtn.getToggleState();
+            repaint (plateFracRect (powerRect[0], powerRect[1], powerRect[2], powerRect[3]).expanded (fpx));
+        }
+
+        // the meter animates continuously — repaint only the display card
+        repaint (plateFracRect (cardX0, cardY0, cardX1 - cardX0, cardY1 - cardY0).expanded (2));
     }
 }
 
 //==============================================================================
+// plategeo fractions are of the FULL generated canvas; the window shows only
+// the plateCrop region, so map full-canvas fraction -> cropped screen px.
 juce::Rectangle<int> VocalAirEditor::plateFracRect (float fx, float fy, float fw, float fh) const
 {
-    return juce::Rectangle<float> (fx * (float) getWidth(),  fy * (float) getHeight(),
-                                   fw * (float) getWidth(),  fh * (float) getHeight())
-               .toNearestInt();
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+    const float sy = (float) getHeight() / (float) plateCrop.getHeight();
+    return juce::Rectangle<float> ((fx * iw - (float) plateCrop.getX()) * sx,
+                                   (fy * ih - (float) plateCrop.getY()) * sy,
+                                   fw * iw * sx,
+                                   fh * ih * sy).toNearestInt();
 }
 
-// Blit the matching region of the lit plate over the base plate — pixel
-// registration is guaranteed because both images share the same canvas.
+// Blit the matching region of the lit plate over the base plate. Both scaled
+// caches share the editor's coordinate space, so this is a 1:1 copy — cheap,
+// and registration is exact by construction.
 void VocalAirEditor::maskFromOn (juce::Graphics& g, juce::Rectangle<int> screenRect)
 {
-    const float iw = (float) chassisOnImg.getWidth(), ih = (float) chassisOnImg.getHeight();
-    g.drawImage (chassisOnImg,
+    g.drawImage (plateOnScaled,
                  screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight(),
-                 juce::roundToInt (((float) screenRect.getX()      / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getY()      / (float) getHeight()) * ih),
-                 juce::roundToInt (((float) screenRect.getWidth()  / (float) getWidth())  * iw),
-                 juce::roundToInt (((float) screenRect.getHeight() / (float) getHeight()) * ih));
+                 screenRect.getX(), screenRect.getY(), screenRect.getWidth(), screenRect.getHeight());
 }
 
 // Same reveal but with a soft alpha ramp along the rect border, so the slight
@@ -419,11 +476,15 @@ void VocalAirEditor::maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<int
 void VocalAirEditor::drawRingWedge (juce::Graphics& g, juce::Slider& s, float cxFrac, float cyFrac,
                                     float domeRFrac, float solidRFrac, float maxRFrac)
 {
-    const float W = (float) getWidth();
-    const juce::Point<float> c (cxFrac * W, cyFrac * (float) getHeight());
-    const float domeR  = domeRFrac  * W;
-    const float solidR = solidRFrac * W;
-    const float R      = maxRFrac   * W;
+    // fractions are of the full canvas; convert through the crop mapping
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth() / (float) plateCrop.getWidth();
+    const juce::Point<float> c ((cxFrac * iw - (float) plateCrop.getX()) * sx,
+                                (cyFrac * ih - (float) plateCrop.getY())
+                                    * (float) getHeight() / (float) plateCrop.getHeight());
+    const float domeR  = domeRFrac  * iw * sx;
+    const float solidR = solidRFrac * iw * sx;
+    const float R      = maxRFrac   * iw * sx;
 
     const float prop = juce::jlimit (0.0f, 1.0f,
                                      (float) s.valueToProportionOfLength (s.getValue()));
@@ -447,27 +508,37 @@ void VocalAirEditor::drawRingWedge (juce::Graphics& g, juce::Slider& s, float cx
         g.restoreState();
     };
 
-    const float feather = full ? 0.0f : juce::jmin (0.22f, (a1 - a0) * 0.5f);
+    // both ends of the arc are feathered so there is never a hard radial cut:
+    // fIn fades the start (6 o'clock) in, fOut fades the leading edge out. At
+    // full value the ring is a seamless uninterrupted annulus.
+    const float span = a1 - a0;
+    const float fOut = full ? 0.0f : juce::jmin (0.22f, span * 0.40f);
+    const float fIn  = full ? 0.0f : juce::jmin (0.10f, span * 0.20f);
     const float aEnd = full ? a0 + juce::MathConstants<float>::twoPi : a1;
 
-    wedge (a0, aEnd - feather, domeR, solidR, 1.0f);
+    wedge (a0 + fIn, aEnd - fOut, domeR, solidR, 1.0f);
     constexpr int aSteps = 10;
     for (int i = 0; i < aSteps; ++i)
-        wedge (aEnd - feather * (1.0f - (float) i / aSteps),
-               aEnd - feather * (1.0f - (float) (i + 1) / aSteps),
-               domeR, solidR,
-               1.0f - ((float) i + 0.5f) / aSteps);
+    {
+        const float t0 = (float) i / aSteps, t1 = (float) (i + 1) / aSteps;
+        // leading edge fade-out
+        wedge (aEnd - fOut * (1.0f - t0), aEnd - fOut * (1.0f - t1),
+               domeR, solidR, 1.0f - (t0 + t1) * 0.5f);
+        // start edge fade-in
+        wedge (a0 + fIn * t0, a0 + fIn * t1,
+               domeR, solidR, (t0 + t1) * 0.5f);
+    }
 
-    const float sf = full ? 0.0f : juce::jmin (0.14f, (a1 - a0) * 0.25f);
+    // outer bloom band, faded radially and softened at both angular ends
     constexpr int rSteps = 4;
     for (int i = 0; i < rSteps; ++i)
     {
         const float alpha = 0.85f * (1.0f - ((float) i + 0.5f) / rSteps);
         const float rIn  = solidR + (R - solidR) * (float) i / rSteps;
         const float rOut = solidR + (R - solidR) * (float) (i + 1) / rSteps;
-        wedge (a0 + sf, aEnd - feather * 0.5f, rIn, rOut, alpha);
-        wedge (a0,             a0 + sf * 0.5f, rIn, rOut, alpha * 0.33f);
-        wedge (a0 + sf * 0.5f, a0 + sf,        rIn, rOut, alpha * 0.66f);
+        wedge (a0 + fIn, aEnd - fOut * 0.5f, rIn, rOut, alpha);
+        wedge (a0,            a0 + fIn * 0.5f, rIn, rOut, alpha * 0.33f);
+        wedge (a0 + fIn * 0.5f, a0 + fIn,      rIn, rOut, alpha * 0.66f);
     }
 }
 
@@ -477,8 +548,12 @@ void VocalAirEditor::drawRingWedge (juce::Graphics& g, juce::Slider& s, float cx
 void VocalAirEditor::drawMeterArc (juce::Graphics& g)
 {
     using namespace plategeo;
-    const float W = (float) getWidth(), H = (float) getHeight();
-    const juce::Point<float> c (arcCx * W, arcCy * H);
+    // fractions are of the full canvas; convert through the crop mapping
+    const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+    const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+    const float sy = (float) getHeight() / (float) plateCrop.getHeight();
+    const juce::Point<float> c ((arcCx * iw - (float) plateCrop.getX()) * sx,
+                                (arcCy * ih - (float) plateCrop.getY()) * sy);
 
     const float t = meter.getT();
     if (t <= 0.004f) return;
@@ -490,7 +565,7 @@ void VocalAirEditor::drawMeterArc (juce::Graphics& g)
     auto wedge = [&] (float from, float to, float rInF, float rOutF, float alpha)
     {
         if (to - from <= 0.0005f) return;
-        const float rIn = rInF * W, rOut = rOutF * W;
+        const float rIn = rInF * iw * sx, rOut = rOutF * iw * sx;
         juce::Path p;
         p.addPieSegment (c.x - rOut, c.y - rOut, rOut * 2.0f, rOut * 2.0f, from, to, rIn / rOut);
         g.saveState();
@@ -521,8 +596,7 @@ void VocalAirEditor::paintPlate (juce::Graphics& g)
 {
     using namespace plategeo;
 
-    g.drawImage (chassisImg, getLocalBounds().toFloat(),
-                 juce::RectanglePlacement::stretchToFit);
+    g.drawImageAt (plateScaled, 0, 0);   // cached 1:1 blit — no per-frame rescale
 
     const int fpx = juce::roundToInt ((float) getWidth() * 0.010f);
 
@@ -599,13 +673,20 @@ void VocalAirEditor::resized()
     if (chassisImg.isValid())
     {
         using namespace plategeo;
-        const float W = (float) getWidth();
+
+        // rebuild the scaled plate caches for the new size (1:1 blits per frame)
+        plateScaled   = skin::renderPlate (chassisImg,   plateCrop, getWidth(), getHeight());
+        plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop, getWidth(), getHeight());
+
+        const float iw = (float) chassisImg.getWidth(), ih = (float) chassisImg.getHeight();
+        const float sx = (float) getWidth()  / (float) plateCrop.getWidth();
+        const float sy = (float) getHeight() / (float) plateCrop.getHeight();
 
         auto knobRect = [&] (float cx, float cy, float sideFracW)
         {
-            const int side = juce::roundToInt (sideFracW * W);
-            return juce::Rectangle<int> (juce::roundToInt (cx * W) - side / 2,
-                                         juce::roundToInt (cy * (float) getHeight()) - side / 2,
+            const int side = juce::roundToInt (sideFracW * iw * sx);
+            return juce::Rectangle<int> (juce::roundToInt ((cx * iw - (float) plateCrop.getX()) * sx) - side / 2,
+                                         juce::roundToInt ((cy * ih - (float) plateCrop.getY()) * sy) - side / 2,
                                          side, side);
         };
 
