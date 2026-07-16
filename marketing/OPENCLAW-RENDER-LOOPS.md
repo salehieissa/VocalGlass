@@ -20,6 +20,33 @@ verbatim into each render job so output drops into the site with zero rework.
 
 ---
 
+## SOURCE STILLS — where the seed/poster frames live (read first)
+
+All source art is in the **VocalGlass plugin repo** (not the Hydrogen storefront
+repo, not the OpenClaw workspace). Canonical, id-named poster stills are staged
+here:
+
+- **`marketing/vst-hero-stills/<id>.png`** — one per plugin, filename = the loop
+  id (e.g. `vocaltune.png`). These are the Apple-style float-on-white hardware
+  product renders (the same image used as each Shopify product's primary photo)
+  = the "existing still render" the DELIVERY block refers to. **Seed Seedance
+  with the matching file; the site uses the same file as `<video poster>`.**
+- They sit on WHITE with a soft baked shadow — matte/roto to transparent alpha
+  after Seedance per the pipeline below.
+- **VocalGeek is the one exception:** no product render exists yet. Generate it
+  first with **GPT Image 2 on fal** from `marketing/vst-hero-stills/vocalgeek-SOURCE-console.png`
+  (prompt is in that folder's `README.txt`), save as `vocalgeek.png`, THEN
+  animate. This is exactly the "if it needs images, use GPT Image 2" case.
+- Alt stills if the site wants the flat front-on UI look instead of the 3D
+  float: `screenshots/clean/<Name>.png` (16) and `marketing/vocalgeek-refs/`
+  (VocalGeek's five cartridge themes).
+
+Recommended run order: **VocalTune as a single test first** (prove seed → motion
+→ alpha matte → MOV+WebM), eyeball it, then batch the other 15, and do VocalGeek
+last (after its GPT Image 2 product render is approved).
+
+---
+
 ## TOOLING & PIPELINE — NON-NEGOTIABLE
 
 **All rendering runs on fal.ai. Two models only, no substitutions:**
