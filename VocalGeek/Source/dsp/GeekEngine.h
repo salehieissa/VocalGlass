@@ -389,11 +389,13 @@ private:
     // performance: history buffer feeds stutter (hit a / print) + tape stop (hit b)
     void processPerformance (juce::AudioBuffer<float>& b, int n, int ch)
     {
-        // ---- auto pilot: tempo-synced hits. Runs off the host beat position
-        // when playing, or an internal free-running clock otherwise. Stutters
-        // land in the last division of every 2nd bar; a brake leans into the
-        // downbeat every 8 bars. Density follows the dose.
+        // ---- auto pilot: a tempo-synced pattern brain. Every 2-bar phrase a
+        // deterministic hash picks a move for the phrase ending — a straight
+        // stutter, an accelerating ramp stutter (1/8 -> 1/32), a gated double
+        // chop, or a brake into the downbeat. Window length grows with the
+        // dose, so higher tolerance = wilder autopilot.
         bool autoStut = false, autoBrake = false;
+        int rateBoost = 0;
         if (p.autoMode)
         {
             double ppq = p.ppq;
@@ -402,11 +404,26 @@ private:
                 freerunPpq += (p.bpm / 60.0) * (double) n / sr;
                 ppq = freerunPpq;
             }
-            const double bar2 = std::fmod (ppq, 8.0);           // 2 bars of 4/4
-            const double bar8 = std::fmod (ppq, 32.0);          // 8 bars
-            const double stutLen = 0.5 + (double) p.dose;       // beats of stutter
-            autoBrake = bar8 >= 32.0 - 1.5;
-            autoStut  = ! autoBrake && bar2 >= 8.0 - stutLen;
+            constexpr double phraseLen = 8.0;                    // 2 bars of 4/4
+            const auto phrase = (juce::int64) std::floor (ppq / phraseLen);
+            juce::uint32 h = (juce::uint32) phrase * 2654435761u;
+            h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
+            const int pat = (int) (h % 4u);
+
+            const double pos = std::fmod (ppq, phraseLen);
+            const double win = pat == 3 ? 1.5 : 0.5 + (double) p.dose * 1.5;
+            if (pos >= phraseLen - win)
+            {
+                const double t = (pos - (phraseLen - win)) / win;   // 0..1
+                switch (pat)
+                {
+                    case 0: autoStut = true; break;                            // straight
+                    case 1: autoStut = true; rateBoost = (int) (t * 3.0); break; // ramp
+                    case 2: autoStut = std::fmod (pos * 4.0, 1.0) < 0.55;      // gated
+                            rateBoost = 1; break;
+                    default: autoBrake = true; break;                          // brakes
+                }
+            }
         }
 
         const bool stutter = p.hitA || p.freeze || autoStut;
@@ -414,7 +431,8 @@ private:
         autoStutterActive.store (autoStut);
         autoBrakeActive.store (autoBrake);
 
-        const int div = juce::jlimit (64, histLen - 4, (int) (divisionSeconds() * sr));
+        const int div = juce::jlimit (64, histLen - 4,
+                                      (int) (divisionSeconds() * sr) >> rateBoost);
 
         for (int i = 0; i < n; ++i)
         {

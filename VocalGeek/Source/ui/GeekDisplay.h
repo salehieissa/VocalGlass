@@ -148,7 +148,10 @@ public:
         // ---- header line
         drawPixelText (g, px, 3, 3, juce::String (themeName (state.theme)) + " . "
                                         + themeDose (state.theme), col, 1);
-        if (state.stutter)
+        if (state.autoFiring)
+            drawPixelText (g, px, cols - 4 - 4 * 10, 3, "geekin out",
+                           ((int) (animPhase * 8.0f) & 1) ? juce::Colours::white : col, 1);
+        else if (state.stutter)
             drawPixelText (g, px, cols - 4 - 4 * (5 + state.rateText.length()), 3,
                            "stut " + state.rateText, col, 1);
         else if (state.tape)
@@ -238,6 +241,9 @@ private:
     static constexpr int gridCols = 150;
 
     //==========================================================================
+    // Live scene: the waveform, dressed per cartridge — lean drips syrup,
+    // smoke exhales puffs, acid goes full rainbow, snow flurries, geeked
+    // glitches into blocks. Overdose gets acid colours on top of everything.
     void paintWave (juce::Graphics& g, float px, int cols, int rows,
                     juce::Colour col, juce::Colour dim, juce::Colour faint, int groundY)
     {
@@ -249,6 +255,10 @@ private:
         };
 
         juce::ignoreUnused (rows);
+        const int theme = state.theme;
+        const bool trippy  = theme == 2 || theme == 5;    // rainbow columns
+        const bool glitchy = theme == 4 || theme == 5;    // blocky + tears
+
         const int waveTop = 14, waveBot = groundY - 8;
         const int waveMid = (waveTop + waveBot) / 2;
         const int halfSpan = (waveBot - waveTop) / 2;
@@ -260,40 +270,111 @@ private:
             const int idx = (w + (int) engine.scope.size() * 8
                                - (span - (x - 3)) * (int) engine.scope.size() / span)
                             % (int) engine.scope.size();
-            const float v = juce::jlimit (0.0f, 1.0f, engine.scope[(size_t) idx] * 1.6f);
+            float v = juce::jlimit (0.0f, 1.0f, engine.scope[(size_t) idx] * 1.6f);
+
+            // geeked: quantize the envelope into chunky blocks + column dropouts
+            int xDraw = x;
+            if (glitchy)
+            {
+                v = std::round (v * 5.0f) / 5.0f;
+                if (noise (x * 41 + 5) > 0.94f) continue;                 // dropout
+                if (noise (x * 17 + 9) > 0.90f)
+                    xDraw = x + (int) ((noise (x * 23) - 0.5f) * 5.0f);   // tear
+            }
+
+            // acid / overdose: every column its own hue, drifting with time
+            juce::Colour colX = col;
+            if (trippy)
+                colX = juce::Colour::fromHSV (std::fmod ((float) x * 0.013f
+                                                         + animPhase * 0.35f, 1.0f),
+                                              0.9f, 1.0f, 1.0f);
+
             const int h = juce::jmax (1, (int) (v * (float) halfSpan));
             for (int dy = 0; dy < h; ++dy)
             {
                 const float fade = 1.0f - 0.5f * (float) dy / (float) juce::jmax (1, halfSpan);
-                cell ((float) x, (float) (waveMid - dy), col.withMultipliedBrightness (fade));
-                cell ((float) x, (float) (waveMid + dy), col.withMultipliedBrightness (fade * 0.85f));
+                cell ((float) xDraw, (float) (waveMid - dy), colX.withMultipliedBrightness (fade));
+                cell ((float) xDraw, (float) (waveMid + dy), colX.withMultipliedBrightness (fade * 0.85f));
             }
-            // drip trail: occasional descender hanging off louder columns
-            if (v > 0.25f && noise (x * 31 + 7) > 0.82f)
+            if (glitchy && v > 0.1f && noise (x * 29 + 1) > 0.93f)        // hot pixel
+                cell ((float) xDraw, (float) (waveMid - h - 1), juce::Colours::white);
+
+            // lean (and overdose): syrup drips hanging off louder columns
+            if ((theme == 0 || theme == 5) && v > 0.2f && noise (x * 31 + 7) > 0.78f)
             {
-                const int trail = (int) (v * 10.0f * noise (x * 13 + 3)) + 2;
+                const int trail = (int) (v * 12.0f * noise (x * 13 + 3)) + 2;
                 for (int t = 0; t < trail; ++t)
                     cell ((float) x, (float) (waveMid + h + t),
                           dim.withMultipliedAlpha (1.0f - (float) t / (float) trail));
             }
         }
 
-        // sparkles + falling particles
+        // lean: wobbling syrup pool sitting on the ground band
+        if (theme == 0 || theme == 5)
+            for (int x = 3; x < cols - 3; ++x)
+            {
+                const float wob = std::sin (animPhase * 2.2f + (float) x * 0.19f) * 1.2f;
+                cell ((float) x, (float) groundY - 4 + wob, dim);
+                cell ((float) x, (float) groundY - 3 + wob, faint);
+            }
+
+        drawParticles (g, px, col, dim, faint);
+    }
+
+    // shared particle renderer (kinds: 0 drip/debris, 1 diamond, 2 puff, 3 flake)
+    void drawParticles (juce::Graphics& g, float px, juce::Colour col,
+                        juce::Colour dim, juce::Colour faint)
+    {
+        auto cell = [&] (float cx, float cy, juce::Colour c)
+        {
+            const float s = px * 0.88f;
+            g.setColour (c);
+            g.fillRect (cx * px + (px - s) * 0.5f, cy * px + (px - s) * 0.5f, s, s);
+        };
+
+        const bool trippy = state.theme == 2 || state.theme == 5;
         for (const auto& d : particles)
             if (d.alive)
             {
-                if (d.kind == 1)
+                const float a = juce::jlimit (0.2f, 1.0f, d.life);
+                juce::Colour c = col;
+                if (trippy)
+                    c = juce::Colour::fromHSV (std::fmod (d.hue + animPhase * 0.3f, 1.0f),
+                                               0.9f, 1.0f, 1.0f);
+                switch (d.kind)
                 {
-                    cell (d.x, d.y, col.withMultipliedAlpha (juce::jlimit (0.2f, 1.0f, d.life)));
-                    cell (d.x - 1, d.y, faint); cell (d.x + 1, d.y, faint);
-                    cell (d.x, d.y - 1, faint); cell (d.x, d.y + 1, faint);
+                    case 1:   // diamond sparkle
+                        cell (d.x, d.y, c.withMultipliedAlpha (a));
+                        cell (d.x - 1, d.y, faint); cell (d.x + 1, d.y, faint);
+                        cell (d.x, d.y - 1, faint); cell (d.x, d.y + 1, faint);
+                        break;
+                    case 2:   // smoke puff: grows as it fades
+                    {
+                        const int r = 1 + (int) ((1.0f - d.life) * 3.0f);
+                        cell (d.x, d.y, dim.withMultipliedAlpha (a));
+                        for (int k = 1; k <= r; ++k)
+                        {
+                            const auto f = faint.withMultipliedAlpha (a * (1.0f - (float) k / (r + 1.0f)));
+                            cell (d.x - k, d.y, f); cell (d.x + k, d.y, f);
+                            cell (d.x, d.y - k, f);
+                        }
+                        break;
+                    }
+                    case 3:   // snowflake
+                        cell (d.x, d.y, juce::Colours::white.withMultipliedAlpha (a * 0.9f));
+                        cell (d.x, d.y + 1, c.withMultipliedAlpha (a * 0.4f));
+                        break;
+                    default:  // drip / debris / pill
+                        cell (d.x, d.y, dim.withMultipliedAlpha (a));
+                        if (state.theme >= 4)
+                            cell (d.x + 1, d.y, faint.withMultipliedAlpha (a));
+                        break;
                 }
-                else
-                    cell (d.x, d.y, dim.withMultipliedAlpha (juce::jlimit (0.2f, 1.0f, d.life)));
             }
     }
 
     //==========================================================================
+    // Awaiting-signal scene, themed per cartridge with its own prompt.
     void paintIdle (juce::Graphics& g, float px, int cols, int rows,
                     juce::Colour col, juce::Colour dim, juce::Colour faint, int groundY)
     {
@@ -304,36 +385,50 @@ private:
             g.fillRect (cx * px + (px - s) * 0.5f, cy * px + (px - s) * 0.5f, s, s);
         };
 
-        // theme playground: idle particles already advanced in advanceParticles()
-        for (const auto& d : particles)
-            if (d.alive)
-            {
-                cell (d.x, d.y, (d.kind == 1 ? col : dim)
-                                    .withMultipliedAlpha (juce::jlimit (0.2f, 1.0f, d.life)));
-                if (state.theme == 4 || state.theme == 5)   // capsule shape
-                    cell (d.x + 1, d.y, faint.withMultipliedAlpha (juce::jlimit (0.2f, 1.0f, d.life)));
-                if (state.theme == 1)                        // puff blob
-                {
-                    cell (d.x + 1, d.y, faint); cell (d.x - 1, d.y, faint);
-                    cell (d.x, d.y - 1, faint);
-                }
-            }
+        drawParticles (g, px, col, dim, faint);
 
-        // wavy syrup pool for lean / snow drift line
-        if (state.theme == 0 || state.theme == 3 || state.theme == 5)
+        // lean/overdose: syrup pool slowly rising the longer it waits
+        if (state.theme == 0 || state.theme == 5)
+        {
+            const int rise = juce::jmin (6, (quietFrames - 5 * 60) / 240);
             for (int x = 3; x < cols - 3; ++x)
             {
-                const float wob = std::sin (animPhase * 2.0f + (float) x * 0.22f) * 1.5f;
-                const int y = groundY - 4 + (int) wob;
-                cell ((float) x, (float) y, dim);
-                cell ((float) x, (float) (y + 1), faint);
+                const float wob = std::sin (animPhase * 2.0f + (float) x * 0.22f) * 1.3f;
+                const int top = groundY - 4 - rise + (int) wob;
+                for (int y = top; y <= groundY - 2; ++y)
+                    cell ((float) x, (float) y, y == top ? dim : faint);
             }
+        }
 
-        // blinking prompt
+        // snow/overdose: snow piles up on the ground band
+        if (state.theme == 3 || state.theme == 5)
+        {
+            const int pile = juce::jmin (5, (quietFrames - 5 * 60) / 300);
+            for (int x = 3; x < cols - 3; ++x)
+            {
+                const int h = 1 + (int) (noise (x * 3) * (float) pile);
+                for (int dy = 0; dy < h; ++dy)
+                    cell ((float) x, (float) (groundY - 4 - dy),
+                          juce::Colours::white.withMultipliedAlpha (0.55f));
+            }
+        }
+
+        // per-cartridge prompt
+        const char* prompt = "feed me a vocal";
+        switch (state.theme)
+        {
+            case 0:  prompt = "pour up a vocal";   break;
+            case 1:  prompt = "spark up a vocal";  break;
+            case 2:  prompt = "drop a vocal tab";  break;
+            case 3:  prompt = "line up a vocal";   break;
+            case 4:  prompt = "pop a vocal in";    break;
+            case 5:  prompt = "feed the machine";  break;
+        }
         if (((int) (animPhase * 1.4f) & 1) == 0)
-            drawPixelText (g, px, (cols - 4 * 12) / 2, rows / 2 - 3, "feed me a vocal",
-                           col, 1);
-        juce::ignoreUnused (rows);
+        {
+            const int len = (int) juce::String (prompt).length();
+            drawPixelText (g, px, (cols - 4 * len) / 2, rows / 2 - 3, prompt, col, 1);
+        }
     }
 
     //==========================================================================
@@ -454,7 +549,8 @@ private:
     }
 
     //==========================================================================
-    struct Particle { float x = 0, y = 0, vx = 0, vy = 0, life = 0; int kind = 0; bool alive = false; };
+    struct Particle { float x = 0, y = 0, vx = 0, vy = 0, life = 0, hue = 0;
+                      int kind = 0; bool alive = false; };
 
     void advanceParticles()
     {
@@ -471,56 +567,62 @@ private:
             for (auto& d : particles)
                 if (! d.alive)
                 {
-                    d = { x, y, vx, vy, 1.0f, kind, true };
+                    d = { x, y, vx, vy, 1.0f, rng.nextFloat(), kind, true };
                     return;
                 }
         };
 
-        if (idle)
+        const int theme = state.theme;
+        const float boost = idle ? 1.0f : level;   // idle runs full tilt
+
+        // per-theme weather, live AND idle (idle just goes harder)
+        if (idle || level > 0.05f)
         {
-            // per-theme playground
-            switch (state.theme)
+            switch (theme)
             {
-                case 0:   // lean: syrup drips from the top edge
-                    if (rng.nextFloat() < 0.25f)
-                        spawn (5.0f + rng.nextFloat() * (float) (cols - 10), 12.0f,
+                case 0:   // lean: syrup drips crawling down
+                    if (rng.nextFloat() < 0.30f * boost)
+                        spawn (5.0f + rng.nextFloat() * (float) (cols - 10),
+                               idle ? 12.0f : (float) rows * 0.5f,
                                0.0f, 0.10f + rng.nextFloat() * 0.15f, 0);
                     break;
-                case 1:   // smoke: puffs drifting up with sway
-                    if (rng.nextFloat() < 0.30f)
-                        spawn (20.0f + rng.nextFloat() * (float) (cols - 40), (float) groundY - 4.0f,
-                               0.0f, -(0.15f + rng.nextFloat() * 0.2f), 1);
+                case 1:   // smoke: puffs exhaled upward
+                    if (rng.nextFloat() < 0.5f * boost)
+                        spawn (10.0f + rng.nextFloat() * (float) (cols - 20),
+                               idle ? (float) groundY - 6.0f
+                                    : (float) rows * 0.5f - rng.nextFloat() * 8.0f,
+                               (rng.nextFloat() - 0.5f) * 0.15f,
+                               -(0.18f + rng.nextFloat() * 0.25f), 2);
                     break;
-                case 2:   // acid: orbiting spiral
-                    if (rng.nextFloat() < 0.5f)
-                    {
-                        const float a = animPhase * 2.0f + rng.nextFloat() * 0.4f;
-                        const float r = 4.0f + std::fmod (animPhase * 9.0f + rng.nextFloat() * 20.0f, 26.0f);
-                        spawn ((float) cols / 2.0f + std::cos (a) * r * 1.4f,
-                               (float) rows / 2.0f + std::sin (a) * r * 0.8f,
-                               0.0f, 0.0f, 1);
-                    }
+                case 3:   // snow: constant flurry from the top
+                    if (rng.nextFloat() < 0.85f * juce::jmax (0.4f, boost))
+                        spawn (rng.nextFloat() * (float) cols, 9.0f,
+                               0.0f, 0.20f + rng.nextFloat() * 0.30f, 3);
                     break;
-                case 3:   // snow: snowfall with sway
-                    if (rng.nextFloat() < 0.5f)
-                        spawn (rng.nextFloat() * (float) cols, 10.0f,
-                               0.0f, 0.2f + rng.nextFloat() * 0.25f, 1);
-                    break;
-                default:  // geeked / overdose: pills popping up like popcorn
-                    if (rng.nextFloat() < 0.22f)
-                        spawn (15.0f + rng.nextFloat() * (float) (cols - 30), (float) groundY - 2.0f,
-                               (rng.nextFloat() - 0.5f) * 0.8f, -(0.8f + rng.nextFloat() * 0.7f), 0);
-                    break;
+                default: break;
             }
-        }
-        else if (level > 0.05f)
-        {
-            if (rng.nextFloat() < level * 0.9f)   // falling debris under the wave
-                spawn (5.0f + rng.nextFloat() * (float) (cols - 10),
-                       (float) rows * 0.5f + rng.nextFloat() * 4.0f,
-                       0.0f, state.theme == 0 ? 0.12f + rng.nextFloat() * 0.1f
-                                              : 0.3f + rng.nextFloat() * 0.4f, 0);
-            if (rng.nextFloat() < level * 0.35f)  // diamond sparkles around the wave
+
+            if (theme == 2 || theme == 5)   // acid/overdose: orbiting colour sparks
+            {
+                if (rng.nextFloat() < 0.8f * juce::jmax (0.4f, boost))
+                {
+                    const float a = animPhase * 2.2f + rng.nextFloat() * 6.28f;
+                    const float r = 6.0f + std::fmod (animPhase * 11.0f
+                                                      + rng.nextFloat() * 24.0f, 30.0f);
+                    spawn ((float) cols / 2.0f + std::cos (a) * r * 1.5f,
+                           (float) rows / 2.0f + std::sin (a) * r * 0.75f,
+                           std::cos (a + 1.57f) * 0.3f, std::sin (a + 1.57f) * 0.18f, 1);
+                }
+            }
+
+            if (theme >= 4 && idle)         // geeked idle: pills popping like popcorn
+            {
+                if (rng.nextFloat() < 0.25f)
+                    spawn (15.0f + rng.nextFloat() * (float) (cols - 30), (float) groundY - 2.0f,
+                           (rng.nextFloat() - 0.5f) * 0.8f, -(0.8f + rng.nextFloat() * 0.7f), 0);
+            }
+
+            if (! idle && rng.nextFloat() < level * 0.35f)   // sparkles near the wave
                 spawn (6.0f + rng.nextFloat() * (float) (cols - 12),
                        (float) rows * 0.28f + rng.nextFloat() * (float) rows * 0.4f,
                        0.0f, 0.03f, 1);
@@ -531,14 +633,15 @@ private:
             {
                 d.x += d.vx;
                 d.y += d.vy;
-                if (idle)
-                {
-                    if (state.theme == 1) d.x += std::sin (animPhase * 3.0f + d.y * 0.3f) * 0.25f;
-                    if (state.theme == 3) d.x += std::sin (animPhase * 2.0f + d.y * 0.2f) * 0.35f;
-                    if (state.theme >= 4) d.vy += 0.045f;   // gravity for popcorn pills
-                }
-                d.life -= (d.kind == 1 && ! idle) ? 0.05f : (state.theme == 0 ? 0.008f : 0.02f);
-                if (d.life <= 0.0f || d.y > (float) rows - 20.0f || d.y < 6.0f
+                if (d.kind == 2) d.x += std::sin (animPhase * 3.0f + d.y * 0.3f) * 0.22f;  // puff sway
+                if (d.kind == 3) d.x += std::sin (animPhase * 2.0f + d.y * 0.2f) * 0.35f;  // flake sway
+                if (theme >= 4 && idle && d.kind == 0) d.vy += 0.045f;   // popcorn gravity
+
+                d.life -= d.kind == 2 ? 0.012f
+                        : d.kind == 3 ? 0.004f
+                        : (d.kind == 1 && ! idle) ? 0.05f
+                        : (theme == 0 ? 0.008f : 0.02f);
+                if (d.life <= 0.0f || d.y > (float) rows - 20.0f || d.y < 5.0f
                     || d.x < 2.0f || d.x > (float) cols - 2.0f)
                     d.alive = false;
             }
@@ -546,7 +649,7 @@ private:
 
     GeekEngine& engine;
     State state;
-    std::array<Particle, 48> particles;
+    std::array<Particle, 160> particles;
     juce::Random rng;
     float animPhase = 0.0f;
     int quietFrames = 0;

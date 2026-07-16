@@ -20,7 +20,8 @@ namespace plategeo
     constexpr float tapX0 = 805.0f, tapY0 = 1531.0f, tapX1 = 926.0f, tapY1 = 1619.0f;
     constexpr float prnX0 = 802.0f, prnY0 = 1640.0f, prnX1 = 926.0f, prnY1 = 1729.0f;
 
-    constexpr float dpadCx = 478.0f, dpadCy = 1614.0f, dpadSide = 500.0f;
+    // sprite's cross spans 0.85 of its canvas; 520*1.06*0.85 ~ 468 px cross
+    constexpr float dpadCx = 478.0f, dpadCy = 1614.0f, dpadSide = 520.0f;
 
     constexpr float hitACx = 1136.0f, hitACy = 1680.0f;
     constexpr float hitBCx = 1352.0f, hitBCy = 1516.0f;
@@ -233,11 +234,11 @@ void VocalGeekEditor::tapClicked()
 void VocalGeekEditor::feedKonami (int symbol)
 {
     konami.add (symbol);
-    while (konami.size() > 10) konami.remove (0);
-    static const int code[10] = { 0, 0, 1, 1, 2, 3, 2, 3, 4, 5 };   // uuddlrlr b a
-    if (konami.size() == 10)
+    while (konami.size() > 8) konami.remove (0);
+    static const int code[8] = { 0, 0, 1, 1, 2, 2, 3, 3 };   // up up down down left left right right
+    if (konami.size() == 8)
     {
-        for (int i = 0; i < 10; ++i)
+        for (int i = 0; i < 8; ++i)
             if (konami[i] != code[i]) return;
         if (auto* par = proc.apvts.getParameter ("theme"))
         {
