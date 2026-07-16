@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 
 //==============================================================================
 // Baked-plate geometry, measured on the 1744x2336 geek chassis plates
@@ -60,7 +61,8 @@ namespace
             case 1:  return "geek-bay-smoke@2x.png";
             case 2:  return "geek-bay-acid@2x.png";
             case 3:  return "geek-bay-snow@2x.png";
-            case 4:  return "geek-bay-geeked@2x.png";
+            case 4:
+            case 5:  return "geek-bay-geeked@2x.png";
             default: return "geek-bay-lean@2x.png";
         }
     }
@@ -113,25 +115,45 @@ VocalGeekEditor::VocalGeekEditor (VocalGeekProcessor& p)
 
     dpad.onNudge = [this] (int dx, int dy)
     {
-        auto nudge = [this] (const char* id, float delta)
+        auto nudge = [this] (const char* id, float delta) -> float
         {
+            float v = 0.0f;
             if (auto* par = proc.apvts.getParameter (id))
             {
                 par->beginChangeGesture();
-                par->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, par->getValue() + delta));
+                v = juce::jlimit (0.0f, 1.0f, par->getValue() + delta);
+                par->setValueNotifyingHost (v);
                 par->endChangeGesture();
             }
+            return v;
         };
-        if (dx != 0) nudge ("space",   (float) dx * 0.1f);
-        if (dy != 0) nudge ("texture", (float) -dy * 0.1f);   // up = more texture
+        if (dx != 0) display.showHud ("space",   nudge ("space",   (float) dx * 0.1f));
+        if (dy != 0) display.showHud ("texture", nudge ("texture", (float) -dy * 0.1f));
+
+        feedKonami (dy < 0 ? 0 : dy > 0 ? 1 : dx < 0 ? 2 : 3);   // u d l r
     };
     addAndMakeVisible (dpad);
+
+    hitA.onPress = [this] { feedKonami (5); };   // a
+    hitB.onPress = [this] { feedKonami (4); };   // b
 
     bay.onCycle = [this] { cycleTheme(); };
     addAndMakeVisible (bay);
 
+    display.onAutoToggle = [this]
+    {
+        if (auto* par = proc.apvts.getParameter ("auto"))
+        {
+            const bool on = proc.apvts.getRawParameterValue ("auto")->load() > 0.5f;
+            par->beginChangeGesture();
+            par->setValueNotifyingHost (on ? 0.0f : 1.0f);
+            par->endChangeGesture();
+        }
+    };
+
     tapBtn.onClick = [this] { tapClicked(); };
     printBtn.onClick = [this] { togglePrint(); };
+    printBtn.addMouseListener (this, false);   // drag OFF the pill exports the loop
     addAndMakeVisible (tapBtn);
     addAndMakeVisible (printBtn);
 
@@ -160,14 +182,20 @@ VocalGeekEditor::~VocalGeekEditor()
 void VocalGeekEditor::applyTheme (int themeIndex)
 {
     if (themeIndex == currentTheme) return;
+    const bool firstApply = currentTheme < 0;
     currentTheme = themeIndex;
+
+    if (! firstApply)
+        display.startSwap();
 
     if (plateBaked)
     {
         auto themed = skin::image (onPlateFor (themeIndex));
         chassisOnImg = themed.isValid() ? themed : skin::image ("geek-chassis-on@2x.png");
         if (getWidth() > 0)
-            plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop, getWidth(), getHeight());
+            plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop,
+                                               juce::roundToInt ((float) getWidth() * plateRes),
+                                               juce::roundToInt ((float) getHeight() * plateRes));
     }
 
     bay.setSprite (skin::image (baySpriteFor (themeIndex)));
@@ -200,6 +228,66 @@ void VocalGeekEditor::tapClicked()
         par->endChangeGesture();
     }
     tapFlashUntil = juce::Time::currentTimeMillis() + 160;
+}
+
+void VocalGeekEditor::feedKonami (int symbol)
+{
+    konami.add (symbol);
+    while (konami.size() > 10) konami.remove (0);
+    static const int code[10] = { 0, 0, 1, 1, 2, 3, 2, 3, 4, 5 };   // uuddlrlr b a
+    if (konami.size() == 10)
+    {
+        for (int i = 0; i < 10; ++i)
+            if (konami[i] != code[i]) return;
+        if (auto* par = proc.apvts.getParameter ("theme"))
+        {
+            par->beginChangeGesture();
+            par->setValueNotifyingHost (par->convertTo0to1 (5.0f));
+            par->endChangeGesture();
+        }
+        display.flashMessage ("overdose unlocked");
+        konami.clear();
+    }
+}
+
+// Drag off the print pill = export the last frozen stutter loop as a wav the
+// user can drop straight into their DAW or beat folder.
+void VocalGeekEditor::mouseDrag (const juce::MouseEvent& e)
+{
+    if (e.originalComponent != &printBtn || dragStarted
+        || e.getDistanceFromDragStart() < 12)
+        return;
+
+    juce::AudioBuffer<float> loop;
+    const int len = proc.engine.readLastLoop (loop);
+    if (len <= 0) return;
+
+    auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                    .getChildFile ("VocalGeek Print.wav");
+    file.deleteFile();
+
+    juce::WavAudioFormat wav;
+    if (auto stream = file.createOutputStream())
+    {
+        if (auto writer = std::unique_ptr<juce::AudioFormatWriter> (
+                wav.createWriterFor (stream.get(), proc.engine.sampleRate(), 2, 24, {}, 0)))
+        {
+            stream.release();   // writer owns it now
+            writer->writeFromAudioSampleBuffer (loop, 0, len);
+        }
+    }
+
+    if (file.existsAsFile())
+    {
+        dragStarted = true;
+        juce::DragAndDropContainer::performExternalDragDropOfFiles ({ file.getFullPathName() },
+                                                                    false, this);
+    }
+}
+
+void VocalGeekEditor::mouseUp (const juce::MouseEvent&)
+{
+    dragStarted = false;
 }
 
 void VocalGeekEditor::togglePrint()
@@ -244,9 +332,13 @@ juce::Rectangle<int> VocalGeekEditor::platePxRect (float x0, float y0, float x1,
 
 void VocalGeekEditor::maskFromOn (juce::Graphics& g, juce::Rectangle<int> rect)
 {
+    // caches are at physical resolution; source coords scale up by plateRes
     g.drawImage (plateOnScaled,
                  rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(),
-                 rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
+                 juce::roundToInt ((float) rect.getX() * plateRes),
+                 juce::roundToInt ((float) rect.getY() * plateRes),
+                 juce::roundToInt ((float) rect.getWidth() * plateRes),
+                 juce::roundToInt ((float) rect.getHeight() * plateRes));
 }
 
 void VocalGeekEditor::maskFromOnFeathered (juce::Graphics& g, juce::Rectangle<int> rect,
@@ -345,7 +437,9 @@ void VocalGeekEditor::paintPlate (juce::Graphics& g)
 {
     using namespace plategeo;
 
-    g.drawImageAt (plateScaled, 0, 0);
+    // 2x cache drawn down 1:1 onto the retina backing store — stays sharp
+    g.drawImage (plateScaled, 0, 0, getWidth(), getHeight(),
+                 0, 0, plateScaled.getWidth(), plateScaled.getHeight());
 
     const int feather = juce::roundToInt ((float) getWidth() * 0.008f);
 
@@ -362,11 +456,13 @@ void VocalGeekEditor::paintPlate (juce::Graphics& g)
     if (proc.apvts.getRawParameterValue ("print")->load() > 0.5f)
         maskFromOnFeathered (g, platePxRect (prnX0, prnY0, prnX1, prnY1), feather);
 
-    // ---- hit halos under the pads
-    if (proc.apvts.getRawParameterValue ("hita")->load() > 0.5f)
+    // ---- hit halos under the pads (manual or auto-pilot)
+    if (proc.apvts.getRawParameterValue ("hita")->load() > 0.5f
+        || proc.engine.autoStutterActive.load())
         maskFromOnFeathered (g, platePxRect (hitACx - hitGlowR, hitACy - hitGlowR,
                                              hitACx + hitGlowR, hitACy + hitGlowR), feather);
-    if (proc.apvts.getRawParameterValue ("hitb")->load() > 0.5f)
+    if (proc.apvts.getRawParameterValue ("hitb")->load() > 0.5f
+        || proc.engine.autoBrakeActive.load())
         maskFromOnFeathered (g, platePxRect (hitBCx - hitGlowR, hitBCy - hitGlowR,
                                              hitBCx + hitGlowR, hitBCy + hitGlowR), feather);
 
@@ -387,8 +483,16 @@ void VocalGeekEditor::layoutPlate()
 {
     using namespace plategeo;
 
-    plateScaled   = skin::renderPlate (chassisImg,   plateCrop, getWidth(), getHeight());
-    plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop, getWidth(), getHeight());
+    if (auto* display2 = juce::Desktop::getInstance().getDisplays()
+                             .getDisplayForRect (getScreenBounds()))
+        plateRes = juce::jlimit (1.0f, 3.0f, (float) display2->scale);
+
+    plateScaled   = skin::renderPlate (chassisImg,   plateCrop,
+                                       juce::roundToInt ((float) getWidth() * plateRes),
+                                       juce::roundToInt ((float) getHeight() * plateRes));
+    plateOnScaled = skin::renderPlate (chassisOnImg, plateCrop,
+                                       juce::roundToInt ((float) getWidth() * plateRes),
+                                       juce::roundToInt ((float) getHeight() * plateRes));
 
     const float sx = (float) getWidth() / (float) plateCrop.getWidth();
 
@@ -425,9 +529,14 @@ void VocalGeekEditor::timerCallback()
     st.theme    = currentTheme;
     st.dose     = proc.apvts.getRawParameterValue ("dose")->load() * 0.01f;
     st.outLevel = proc.engine.outLevel.load();
+    st.inLevel  = proc.engine.inLevel.load();
+    st.autoOn   = proc.apvts.getRawParameterValue ("auto")->load() > 0.5f;
+    st.autoFiring = proc.engine.autoStutterActive.load() || proc.engine.autoBrakeActive.load();
     st.stutter  = proc.apvts.getRawParameterValue ("hita")->load() > 0.5f
-               || proc.apvts.getRawParameterValue ("print")->load() > 0.5f;
-    st.tape     = proc.apvts.getRawParameterValue ("hitb")->load() > 0.5f;
+               || proc.apvts.getRawParameterValue ("print")->load() > 0.5f
+               || proc.engine.autoStutterActive.load();
+    st.tape     = proc.apvts.getRawParameterValue ("hitb")->load() > 0.5f
+               || proc.engine.autoBrakeActive.load();
     const int rate = (int) proc.apvts.getRawParameterValue ("rate")->load();
     st.rateText = rate == 0 ? "1/4" : rate == 1 ? "1/8" : rate == 2 ? "1/16" : "1/32";
     display.refresh (st);
@@ -475,14 +584,16 @@ void VocalGeekEditor::timerCallback()
         repaint (platePxRect (prnX0, prnY0, prnX1, prnY1).expanded (8));
     }
 
-    const bool a = proc.apvts.getRawParameterValue ("hita")->load() > 0.5f;
+    const bool a = proc.apvts.getRawParameterValue ("hita")->load() > 0.5f
+                || proc.engine.autoStutterActive.load();
     if (a != shownHitA)
     {
         shownHitA = a;
         repaint (platePxRect (hitACx - hitGlowR, hitACy - hitGlowR,
                               hitACx + hitGlowR, hitACy + hitGlowR).expanded (8));
     }
-    const bool bDown = proc.apvts.getRawParameterValue ("hitb")->load() > 0.5f;
+    const bool bDown = proc.apvts.getRawParameterValue ("hitb")->load() > 0.5f
+                    || proc.engine.autoBrakeActive.load();
     if (bDown != shownHitB)
     {
         shownHitB = bDown;
@@ -523,7 +634,7 @@ void VocalGeekEditor::paint (juce::Graphics& g)
     const float vw = juce::GlyphArrangement::getStringWidth (wm, "vocal");
     g.setColour (theme::ink);
     g.drawText ("vocal", 28, 22, 240, 34, juce::Justification::left);
-    g.setColour (GeekDisplay::phosphor (juce::jmax (0, currentTheme)));
+    g.setColour (display.phosphor (juce::jmax (0, currentTheme)));
     g.drawText ("geek", 28 + (int) vw, 22, 240, 34, juce::Justification::left);
 }
 

@@ -21,16 +21,30 @@ class HitPad : public juce::Component
 public:
     explicit HitPad (juce::RangedAudioParameter* param = nullptr) : par (param) {}
 
+    std::function<void()> onPress;
+
     void setParam (juce::RangedAudioParameter* param) { par = param; }
     void setSprite (const juce::Image& img) { sprite = img; repaint(); }
 
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat();
-        if (down) r = r.reduced (r.getWidth() * 0.02f);
+        if (down) r = r.reduced (r.getWidth() * 0.035f).translated (0.0f, r.getHeight() * 0.015f);
         if (sprite.isValid())
         {
             skin::drawInRect (g, sprite, skin::containRect (sprite, r));
+            if (down)
+            {
+                // pressed: compress the highlight and seat the dome
+                auto dome = skin::containRect (sprite, r);
+                juce::ColourGradient press (juce::Colours::black.withAlpha (0.22f),
+                                            dome.getCentreX(), dome.getBottom(),
+                                            juce::Colours::transparentBlack,
+                                            dome.getCentreX(), dome.getY() + dome.getHeight() * 0.35f,
+                                            false);
+                g.setGradientFill (press);
+                g.fillEllipse (dome.reduced (dome.getWidth() * 0.06f));
+            }
             return;
         }
         // vector fallback: glossy accent dome
@@ -40,7 +54,13 @@ public:
         g.fillEllipse (r.reduced (r.getWidth() * 0.22f).translated (0.0f, -r.getHeight() * 0.12f));
     }
 
-    void mouseDown (const juce::MouseEvent&) override { down = true;  push (true);  repaint(); }
+    void mouseDown (const juce::MouseEvent&) override
+    {
+        down = true;
+        push (true);
+        if (onPress != nullptr) onPress();
+        repaint();
+    }
     void mouseUp   (const juce::MouseEvent&) override { down = false; push (false); repaint(); }
 
     bool isDown() const noexcept { return down; }
@@ -160,6 +180,10 @@ private:
     void tapClicked();
     void togglePrint();
 
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void feedKonami (int symbol);
+
     // ---- baked-plate (photoreal skin) mode ----
     void setupPlateMode();
     void paintPlate (juce::Graphics&);
@@ -175,6 +199,15 @@ private:
 
     juce::Rectangle<int> plateCrop;
     juce::Image plateScaled, plateOnScaled;
+    // plate caches are built at physical (retina) resolution and drawn down,
+    // otherwise the window blits a logical-res cache and macOS blurs it 2x
+    float plateRes = 2.0f;
+
+    // print-to-wav drag export
+    bool dragStarted = false;
+
+    // konami tracker (u u d d l r l r b a -> overdose cartridge)
+    juce::Array<int> konami;
 
     // dirty-region repaint bookkeeping
     std::array<double, 2> shownKnob { -1.0, -1.0 };

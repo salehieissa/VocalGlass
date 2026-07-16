@@ -20,11 +20,11 @@ VocalGeekProcessor::createParameterLayout()
 
     layout.add (std::make_unique<AudioParameterChoice>(
         ParameterID { "theme", 1 }, "Cartridge",
-        StringArray { "Lean", "Smoke", "Acid", "Snow", "Geeked" }, 0));
+        StringArray { "Lean", "Smoke", "Acid", "Snow", "Geeked", "Overdose" }, 0));
 
     layout.add (std::make_unique<AudioParameterFloat>(
         ParameterID { "dose", 1 }, "Dose",
-        NormalisableRange<float> (0.0f, 100.0f, 1.0f), 50.0f));
+        NormalisableRange<float> (0.0f, 100.0f, 1.0f), 35.0f));
 
     layout.add (std::make_unique<AudioParameterFloat>(
         ParameterID { "texture", 1 }, "Texture",
@@ -46,6 +46,9 @@ VocalGeekProcessor::createParameterLayout()
 
     layout.add (std::make_unique<AudioParameterBool>(
         ParameterID { "print", 1 }, "Print", false));
+
+    layout.add (std::make_unique<AudioParameterBool>(
+        ParameterID { "auto", 1 }, "Auto", false));
 
     layout.add (std::make_unique<AudioParameterFloat>(
         ParameterID { "output", 1 }, "Output",
@@ -70,7 +73,7 @@ bool VocalGeekProcessor::isBusesLayoutSupported (const BusesLayout& layouts) con
 }
 
 //==============================================================================
-void VocalGeekProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void VocalGeekProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
 
@@ -78,25 +81,52 @@ void VocalGeekProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, numSamples);
 
+    // MIDI performance: C1 (36) holds HIT A, D1 (38) holds HIT B, E1 (40)
+    // taps the rate — so the pads are playable from a keyboard while tracking.
+    for (const auto meta : midi)
+    {
+        const auto m = meta.getMessage();
+        if (m.isNoteOn())
+        {
+            if (m.getNoteNumber() == 36) midiHeldA = true;
+            if (m.getNoteNumber() == 38) midiHeldB = true;
+            if (m.getNoteNumber() == 40)
+                if (auto* par = apvts.getParameter ("rate"))
+                    par->setValueNotifyingHost (par->convertTo0to1 (
+                        (float) (((int) apvts.getRawParameterValue ("rate")->load() + 1) % 4)));
+        }
+        else if (m.isNoteOff() || m.isAllNotesOff())
+        {
+            if (m.getNoteNumber() == 36 || m.isAllNotesOff()) midiHeldA = false;
+            if (m.getNoteNumber() == 38 || m.isAllNotesOff()) midiHeldB = false;
+        }
+    }
+
     // License gate: until activated, pass audio through clean (no processing).
     if (! license.isActivated())
         return;
 
     GeekEngine::Params p;
-    p.theme   = (int) apvts.getRawParameterValue ("theme")->load();
-    p.dose    = apvts.getRawParameterValue ("dose")->load() * 0.01f;
-    p.texture = apvts.getRawParameterValue ("texture")->load() * 0.01f;
-    p.space   = apvts.getRawParameterValue ("space")->load() * 0.01f;
-    p.rate    = (int) apvts.getRawParameterValue ("rate")->load();
-    p.hitA    = apvts.getRawParameterValue ("hita")->load() > 0.5f;
-    p.hitB    = apvts.getRawParameterValue ("hitb")->load() > 0.5f;
-    p.freeze  = apvts.getRawParameterValue ("print")->load() > 0.5f;
-    p.outDb   = apvts.getRawParameterValue ("output")->load();
+    p.theme    = (int) apvts.getRawParameterValue ("theme")->load();
+    p.dose     = apvts.getRawParameterValue ("dose")->load() * 0.01f;
+    p.texture  = apvts.getRawParameterValue ("texture")->load() * 0.01f;
+    p.space    = apvts.getRawParameterValue ("space")->load() * 0.01f;
+    p.rate     = (int) apvts.getRawParameterValue ("rate")->load();
+    p.hitA     = midiHeldA || apvts.getRawParameterValue ("hita")->load() > 0.5f;
+    p.hitB     = midiHeldB || apvts.getRawParameterValue ("hitb")->load() > 0.5f;
+    p.freeze   = apvts.getRawParameterValue ("print")->load() > 0.5f;
+    p.autoMode = apvts.getRawParameterValue ("auto")->load() > 0.5f;
+    p.outDb    = apvts.getRawParameterValue ("output")->load();
 
     if (auto* playhead = getPlayHead())
         if (auto pos = playhead->getPosition())
+        {
             if (auto bpm = pos->getBpm())
                 p.bpm = *bpm;
+            if (pos->getIsPlaying())
+                if (auto ppq = pos->getPpqPosition())
+                    p.ppq = *ppq;
+        }
 
     engine.setParams (p);
     engine.process (buffer);

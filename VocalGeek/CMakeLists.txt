@@ -35,7 +35,7 @@ juce_add_plugin(VocalGeek
     FORMATS                 VST3 AU Standalone
     PRODUCT_NAME            "VocalGeek"
     IS_SYNTH                FALSE
-    NEEDS_MIDI_INPUT        FALSE
+    NEEDS_MIDI_INPUT        TRUE
     NEEDS_MIDI_OUTPUT       FALSE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "VocalGeek needs audio input so the standalone app can process your voice."

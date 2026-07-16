@@ -27,7 +27,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override  { return false; }
+    bool acceptsMidi() const override  { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 3.0; }
@@ -54,6 +54,7 @@ private:
 
     double currentSampleRate = 44100.0;
     int currentProgram = 0;
+    bool midiHeldA = false, midiHeldB = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalGeekProcessor)
 };

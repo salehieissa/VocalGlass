@@ -19,20 +19,22 @@
 class GeekEngine
 {
 public:
-    enum Theme { Lean = 0, Smoke, Acid, Snow, Geeked };
+    enum Theme { Lean = 0, Smoke, Acid, Snow, Geeked, Overdose };
 
     struct Params
     {
         int    theme    = Lean;
-        float  dose     = 0.5f;    // 0..1 macro
+        float  dose     = 0.35f;   // 0..1 macro
         float  texture  = 0.5f;    // 0..1 (d-pad up/down)
         float  space    = 0.5f;    // 0..1 (d-pad left/right)
         int    rate     = 1;       // 0=1/4 1=1/8 2=1/16 3=1/32
         bool   hitA     = false;   // stutter while held
         bool   hitB     = false;   // tape stop while held
         bool   freeze   = false;   // print: latch the stutter loop
+        bool   autoMode = false;   // tempo-synced auto performance
         float  outDb    = 0.0f;
         double bpm      = 120.0;
+        double ppq      = -1.0;    // host beat position (<0 = not playing)
     };
 
     void prepare (double sampleRate, int blockSize, int numChannels)
@@ -57,6 +59,12 @@ public:
         for (auto& h : history) { h.assign ((size_t) histLen, 0.0f); }
         histWrite = 0;
         stutterPos = 0.0; tapeSpeed = 1.0f; tapePos = 0.0;
+
+        lastLoop.setSize (2, histLen, false, true);
+        lastLoopLen.store (0);
+
+        compGain = 1.0f;
+        freerunPpq = 0.0;
 
         scopeWrite.store (0);
         scope.fill (0.0f);
@@ -90,6 +98,14 @@ public:
             inPeak = juce::jmax (inPeak, buffer.getMagnitude (c, 0, n));
         inLevel.store (0.9f * inLevel.load() + 0.1f * inPeak);
 
+        // pre-chain loudness for the compensation stage
+        float inMS = 1.0e-9f;
+        for (int c = 0; c < ch; ++c)
+        {
+            const auto* d = buffer.getReadPointer (c);
+            for (int i = 0; i < n; ++i) inMS += d[i] * d[i];
+        }
+
         switch (p.theme)
         {
             case Lean:   processLean   (buffer, n, ch); break;
@@ -97,6 +113,25 @@ public:
             case Acid:   processAcid   (buffer, n, ch); break;
             case Snow:   processSnow   (buffer, n, ch); break;
             case Geeked: processGeeked (buffer, n, ch); break;
+            case Overdose:
+                processGeeked (buffer, n, ch);
+                processAcid   (buffer, n, ch);
+                break;
+        }
+
+        // loudness compensation: these sit after finished vocal chains, so the
+        // cartridges must change character, not level. Match post-chain RMS to
+        // the input RMS with a slewed gain (echo tails make it conservative).
+        {
+            float outMS = 1.0e-9f;
+            for (int c = 0; c < ch; ++c)
+            {
+                const auto* d = buffer.getReadPointer (c);
+                for (int i = 0; i < n; ++i) outMS += d[i] * d[i];
+            }
+            const float target = juce::jlimit (0.35f, 2.5f, std::sqrt (inMS / outMS));
+            compGain += (target - compGain) * 0.12f;
+            buffer.applyGain (compGain);
         }
 
         processPerformance (buffer, n, ch);
@@ -127,8 +162,44 @@ public:
     static constexpr int scopeSize = 96;
     std::array<float, scopeSize> scope {};
     std::atomic<int> scopeWrite { 0 };
+    std::atomic<bool> autoStutterActive { false }, autoBrakeActive { false };
+
+    // Copy of the most recent stutter loop for the "print" drag-export.
+    // Returns the number of valid samples (0 = nothing captured yet).
+    int readLastLoop (juce::AudioBuffer<float>& dest)
+    {
+        const juce::SpinLock::ScopedTryLockType tl (loopLock);
+        if (! tl.isLocked()) return 0;
+        const int len = lastLoopLen.load();
+        if (len <= 0) return 0;
+        dest.setSize (2, len, false, true);
+        for (int c = 0; c < 2; ++c)
+            dest.copyFrom (c, 0, lastLoop, c, 0, len);
+        return len;
+    }
+
+    double sampleRate() const noexcept { return sr; }
 
 private:
+    void captureLoop (int div, int ch)
+    {
+        const juce::SpinLock::ScopedTryLockType tl (loopLock);
+        if (! tl.isLocked()) return;                      // UI is reading; skip
+        const int len = juce::jmin (div, lastLoop.getNumSamples());
+        for (int c = 0; c < 2; ++c)
+        {
+            auto* d = lastLoop.getWritePointer (c);
+            const auto& h = history[(size_t) juce::jmin (c, ch - 1)];
+            for (int i = 0; i < len; ++i)
+            {
+                int idx = stutterStart + i;
+                if (idx >= histLen) idx -= histLen;
+                d[i] = h[(size_t) idx];
+            }
+        }
+        lastLoopLen.store (len);
+    }
+
     //==========================================================================
     // theme chains
     void processLean (juce::AudioBuffer<float>& b, int n, int ch)
@@ -318,8 +389,30 @@ private:
     // performance: history buffer feeds stutter (hit a / print) + tape stop (hit b)
     void processPerformance (juce::AudioBuffer<float>& b, int n, int ch)
     {
-        const bool stutter = p.hitA || p.freeze;
-        const bool tape    = p.hitB;
+        // ---- auto pilot: tempo-synced hits. Runs off the host beat position
+        // when playing, or an internal free-running clock otherwise. Stutters
+        // land in the last division of every 2nd bar; a brake leans into the
+        // downbeat every 8 bars. Density follows the dose.
+        bool autoStut = false, autoBrake = false;
+        if (p.autoMode)
+        {
+            double ppq = p.ppq;
+            if (ppq < 0.0)
+            {
+                freerunPpq += (p.bpm / 60.0) * (double) n / sr;
+                ppq = freerunPpq;
+            }
+            const double bar2 = std::fmod (ppq, 8.0);           // 2 bars of 4/4
+            const double bar8 = std::fmod (ppq, 32.0);          // 8 bars
+            const double stutLen = 0.5 + (double) p.dose;       // beats of stutter
+            autoBrake = bar8 >= 32.0 - 1.5;
+            autoStut  = ! autoBrake && bar2 >= 8.0 - stutLen;
+        }
+
+        const bool stutter = p.hitA || p.freeze || autoStut;
+        const bool tape    = p.hitB || autoBrake;
+        autoStutterActive.store (autoStut);
+        autoBrakeActive.store (autoBrake);
 
         const int div = juce::jlimit (64, histLen - 4, (int) (divisionSeconds() * sr));
 
@@ -336,6 +429,7 @@ private:
                     stutterStart = histWrite - div; if (stutterStart < 0) stutterStart += histLen;
                     stutterPos = 0.0;
                     wasStutter = true;
+                    captureLoop (div, ch);
                 }
                 int idx = stutterStart + (int) stutterPos;
                 if (idx >= histLen) idx -= histLen;
@@ -437,4 +531,11 @@ private:
     double stutterPos = 0.0, tapePos = 0.0;
     float tapeSpeed = 1.0f;
     bool wasStutter = false, wasTape = false;
+
+    float compGain = 1.0f;
+    double freerunPpq = 0.0;
+
+    juce::SpinLock loopLock;
+    juce::AudioBuffer<float> lastLoop;
+    std::atomic<int> lastLoopLen { 0 };
 };
