@@ -42,6 +42,8 @@ public:
         else                   ++quietFrames;
 
         advanceParticles();
+        if (quietFrames > 5 * 60)
+            advanceFight (gridCols);
         repaint();
     }
 
@@ -93,11 +95,20 @@ public:
         {
             case 1:  return "3.5g";
             case 2:  return "1 tab";
-            case 3:  return "1g";
+            case 3:  return "8ball";
             case 4:  return "30mg";
             case 5:  return "all of it";
             default: return "2oz";
         }
+    }
+
+    // acid / overdose wave gradient: orange at the top, hot pink through the
+    // middle, ice blue at the bottom (matches the approved screen mockups)
+    static juce::Colour tripGradient (float t)
+    {
+        const juce::Colour orange (0xffff8a1e), pink (0xfffc22c3), blue (0xff35c7f0);
+        return t < 0.5f ? orange.interpolatedWith (pink, t * 2.0f)
+                        : pink.interpolatedWith (blue, (t - 0.5f) * 2.0f);
     }
 
     // Only the AUTO tag corner takes clicks; everything else stays a display.
@@ -158,17 +169,10 @@ public:
             drawPixelText (g, px, cols - 4 - 4 * 6, 3, "brakes", col, 1);
 
         const bool idle = quietFrames > 5 * 60;
-
-        // ---- ground band (textured floor like the mockup)
         const int groundY = rows - 26;
-        for (int x = 3; x < cols - 3; ++x)
-        {
-            const float nse = noise (x * 7 + 13);
-            const int h = 1 + (int) (nse * 2.9f);
-            for (int dy = 0; dy < h; ++dy)
-                cell ((float) x, (float) (groundY - dy),
-                      faint.withMultipliedAlpha (0.5f + 0.5f * nse));
-        }
+
+        paintDecor  (g, px, cols, rows, col, dim, faint);
+        paintGround (g, px, cols, groundY, col, dim, faint);
 
         juce::ignoreUnused (diamond);
         if (idle)
@@ -241,9 +245,102 @@ private:
     static constexpr int gridCols = 150;
 
     //==========================================================================
-    // Live scene: the waveform, dressed per cartridge — lean drips syrup,
-    // smoke exhales puffs, acid goes full rainbow, snow flurries, geeked
-    // glitches into blocks. Overdose gets acid colours on top of everything.
+    // The wavy sparkle ground band from the mockups: a sine drift line, a
+    // dithered fill underneath, and bright diamond gems embedded in the crest.
+    void paintGround (juce::Graphics& g, float px, int cols, int groundY,
+                      juce::Colour col, juce::Colour dim, juce::Colour faint)
+    {
+        auto cell = [&] (float cx, float cy, juce::Colour c)
+        {
+            const float s = px * 0.88f;
+            g.setColour (c);
+            g.fillRect (cx * px + (px - s) * 0.5f, cy * px + (px - s) * 0.5f, s, s);
+        };
+
+        for (int x = 3; x < cols - 3; ++x)
+        {
+            const float crest = std::sin (animPhase * 0.8f + (float) x * 0.12f) * 2.2f
+                              + std::sin ((float) x * 0.031f) * 1.6f;
+            const int top = groundY - 4 + (int) crest;
+            cell ((float) x, (float) top, dim);                          // crest line
+            for (int y = top + 1; y <= groundY + 2; ++y)                 // dither fill
+                if (((x + y * 3) % 3) != 0)
+                    cell ((float) x, (float) y,
+                          faint.withMultipliedAlpha (0.4f + 0.5f * noise (x * 7 + y * 13)));
+        }
+
+        // embedded diamond gems, twinkling
+        for (int k = 0; k < 9; ++k)
+        {
+            const int x = 8 + (k * 16 + (int) (noise (k * 91) * 9.0f)) % (cols - 16);
+            const float crest = std::sin (animPhase * 0.8f + (float) x * 0.12f) * 2.2f
+                              + std::sin ((float) x * 0.031f) * 1.6f;
+            const int y = groundY - 2 + (int) crest;
+            const float tw = 0.55f + 0.45f * std::sin (animPhase * 2.5f + (float) k * 1.7f);
+            cell ((float) x, (float) y, juce::Colours::white.withMultipliedAlpha (tw));
+            cell ((float) x - 1, (float) y, col.withMultipliedAlpha (tw * 0.8f));
+            cell ((float) x + 1, (float) y, col.withMultipliedAlpha (tw * 0.8f));
+            cell ((float) x, (float) y - 1, col.withMultipliedAlpha (tw * 0.8f));
+            cell ((float) x, (float) y + 1, col.withMultipliedAlpha (tw * 0.8f));
+        }
+    }
+
+    // Per-theme static dressing: acid gets pixel spirals in the corners,
+    // snow gets frost creeping in from every corner.
+    void paintDecor (juce::Graphics& g, float px, int cols, int rows,
+                     juce::Colour col, juce::Colour dim, juce::Colour faint)
+    {
+        auto cell = [&] (float cx, float cy, juce::Colour c)
+        {
+            const float s = px * 0.88f;
+            g.setColour (c);
+            g.fillRect (cx * px + (px - s) * 0.5f, cy * px + (px - s) * 0.5f, s, s);
+        };
+
+        const int theme = state.theme;
+        if (theme == 2 || theme == 5)   // spirals, slowly rotating
+        {
+            const float spin = animPhase * 0.6f;
+            const struct { int x, y; } corners[3] = { { cols - 12, 10 },
+                                                      { 10, rows / 2 + 6 },
+                                                      { cols - 10, rows - 34 } };
+            for (int c2 = 0; c2 < 3; ++c2)
+                for (float a = 0.0f; a < 12.0f; a += 0.28f)
+                {
+                    const float r = 0.6f + a * 0.55f;
+                    juce::Colour cc = theme == 5
+                        ? juce::Colour::fromHSV (std::fmod (a * 0.06f + animPhase * 0.2f, 1.0f), 0.9f, 1.0f, 1.0f)
+                        : dim;
+                    cell ((float) corners[c2].x + std::cos (a + spin) * r,
+                          (float) corners[c2].y + std::sin (a + spin) * r * 0.8f,
+                          cc.withMultipliedAlpha (0.85f));
+                }
+        }
+        else if (theme == 3)            // frost corners
+        {
+            for (int cy = 0; cy < 2; ++cy)
+                for (int cx2 = 0; cx2 < 2; ++cx2)
+                    for (int k = 0; k < 60; ++k)
+                    {
+                        const float u = noise (k * 17 + cx2 * 31 + cy * 57);
+                        const float v = noise (k * 29 + cx2 * 13 + cy * 71);
+                        const float dx = u * u * 16.0f, dy = v * v * 12.0f;
+                        if (dx + dy > 17.0f) continue;
+                        const float x = cx2 == 0 ? 2.0f + dx : (float) cols - 3.0f - dx;
+                        const float y = cy == 0 ? 9.0f + dy : (float) rows - 4.0f - dy;
+                        cell (x, y, juce::Colours::white.withMultipliedAlpha (
+                                        0.25f + 0.35f * noise (k * 7)));
+                    }
+        }
+        juce::ignoreUnused (col, faint);
+    }
+
+    //==========================================================================
+    // Live scene: the waveform, dressed per cartridge to match the approved
+    // screen mockups — lean drips syrup, smoke exhales textured plumes off the
+    // wave, acid melts through an orange->pink->blue gradient with wiggling
+    // tendrils, snow hangs icicles under a flurry, geeked glitches into
+    // blocks. Overdose stacks the acid gradient on everything.
     void paintWave (juce::Graphics& g, float px, int cols, int rows,
                     juce::Colour col, juce::Colour dim, juce::Colour faint, int groundY)
     {
@@ -256,12 +353,30 @@ private:
 
         juce::ignoreUnused (rows);
         const int theme = state.theme;
-        const bool trippy  = theme == 2 || theme == 5;    // rainbow columns
+        const bool trippy  = theme == 2 || theme == 5;    // gradient + tendrils
         const bool glitchy = theme == 4 || theme == 5;    // blocky + tears
+        const bool icy     = theme == 3;
 
-        const int waveTop = 14, waveBot = groundY - 8;
+        const int waveTop = 16, waveBot = groundY - 9;
         const int waveMid = (waveTop + waveBot) / 2;
         const int halfSpan = (waveBot - waveTop) / 2;
+
+        // colour of a wave cell at absolute row y: acid runs the mockup
+        // gradient top->bottom; snow is white-cored ice; rest use phosphor
+        auto waveColour = [&] (int y, float fade) -> juce::Colour
+        {
+            if (trippy)
+            {
+                const float t = juce::jlimit (0.0f, 1.0f,
+                    ((float) y - (float) waveTop) / (float) (waveBot - waveTop)
+                        + std::sin (animPhase * 0.7f) * 0.06f);
+                return tripGradient (t).withMultipliedBrightness (0.7f + 0.3f * fade);
+            }
+            if (icy)
+                return juce::Colours::white.interpolatedWith (col, 1.0f - fade * 0.7f)
+                           .withMultipliedBrightness (0.75f + 0.25f * fade);
+            return col.withMultipliedBrightness (fade);
+        };
 
         const int w = engine.scopeWrite.load();
         const int span = cols - 6;
@@ -282,30 +397,77 @@ private:
                     xDraw = x + (int) ((noise (x * 23) - 0.5f) * 5.0f);   // tear
             }
 
-            // acid / overdose: every column its own hue, drifting with time
-            juce::Colour colX = col;
-            if (trippy)
-                colX = juce::Colour::fromHSV (std::fmod ((float) x * 0.013f
-                                                         + animPhase * 0.35f, 1.0f),
-                                              0.9f, 1.0f, 1.0f);
-
             const int h = juce::jmax (1, (int) (v * (float) halfSpan));
             for (int dy = 0; dy < h; ++dy)
             {
                 const float fade = 1.0f - 0.5f * (float) dy / (float) juce::jmax (1, halfSpan);
-                cell ((float) xDraw, (float) (waveMid - dy), colX.withMultipliedBrightness (fade));
-                cell ((float) xDraw, (float) (waveMid + dy), colX.withMultipliedBrightness (fade * 0.85f));
+                // knit texture: vary each cell's brightness with fixed noise
+                const float knit = 0.78f + 0.22f * noise (x * 5 + dy * 11);
+                cell ((float) xDraw, (float) (waveMid - dy),
+                      waveColour (waveMid - dy, fade).withMultipliedBrightness (knit));
+                cell ((float) xDraw, (float) (waveMid + dy),
+                      waveColour (waveMid + dy, fade * 0.9f).withMultipliedBrightness (knit));
             }
             if (glitchy && v > 0.1f && noise (x * 29 + 1) > 0.93f)        // hot pixel
                 cell ((float) xDraw, (float) (waveMid - h - 1), juce::Colours::white);
 
-            // lean (and overdose): syrup drips hanging off louder columns
-            if ((theme == 0 || theme == 5) && v > 0.2f && noise (x * 31 + 7) > 0.78f)
-            {
+            // ---- per-theme dressing hanging off / rising from the wave ----
+            const float seed = noise (x * 31 + 7);
+
+            if ((theme == 0 || theme == 5) && v > 0.2f && seed > 0.78f)
+            {   // lean: syrup drips
                 const int trail = (int) (v * 12.0f * noise (x * 13 + 3)) + 2;
                 for (int t = 0; t < trail; ++t)
                     cell ((float) x, (float) (waveMid + h + t),
                           dim.withMultipliedAlpha (1.0f - (float) t / (float) trail));
+            }
+
+            if (trippy && v > 0.15f && seed > 0.72f)
+            {   // acid: melting tendrils wiggling to the ground
+                const int reach = juce::jmin (groundY - 6 - (waveMid + h),
+                                              (int) (v * 30.0f * noise (x * 13 + 3)) + 6);
+                for (int t = 0; t < reach; ++t)
+                {
+                    const int y = waveMid + h + t;
+                    const float wig = std::sin ((float) y * 0.28f + animPhase * 2.0f
+                                                + (float) x * 0.7f)
+                                      * (1.0f + (float) t * 0.10f);
+                    const float tt = juce::jlimit (0.0f, 1.0f,
+                        ((float) y - (float) waveTop) / (float) (waveBot - waveTop));
+                    cell ((float) x + wig, (float) y,
+                          tripGradient (tt).withMultipliedAlpha (
+                              0.9f - 0.5f * (float) t / (float) juce::jmax (1, reach)));
+                }
+            }
+
+            if (theme == 1 && v > 0.18f && seed > 0.74f)
+            {   // smoke: textured plume rising off the wave crest
+                const int reach = juce::jmin (waveMid - h - waveTop + 6,
+                                              (int) (v * 26.0f * noise (x * 13 + 3)) + 8);
+                for (int t = 0; t < reach; ++t)
+                {
+                    const int y = waveMid - h - t;
+                    const float swy = std::sin ((float) y * 0.22f + animPhase * 1.6f
+                                                + (float) x * 0.5f)
+                                      * (1.0f + (float) t * 0.14f);
+                    const float a = 0.8f - 0.6f * (float) t / (float) juce::jmax (1, reach);
+                    const float wid = 1.0f + (float) t * 0.12f;
+                    for (int dx = (int) -wid; dx <= (int) wid; ++dx)
+                        if (noise (x * 3 + t * 7 + dx * 13) > 0.42f)
+                            cell ((float) x + swy + (float) dx, (float) y,
+                                  dim.withMultipliedAlpha (a * (0.5f + 0.5f * noise (t * 5 + dx))));
+                }
+            }
+
+            if (icy && v > 0.2f && seed > 0.80f)
+            {   // snow: icicles hanging under the wave
+                const int len = (int) (v * 14.0f * noise (x * 13 + 3)) + 3;
+                for (int t = 0; t < len; ++t)
+                    cell ((float) x, (float) (waveMid + h + t),
+                          juce::Colours::white.withMultipliedAlpha (
+                              0.85f - 0.6f * (float) t / (float) len));
+                cell ((float) x, (float) (waveMid + h + len),
+                      col.withMultipliedAlpha (0.5f));
             }
         }
 
@@ -314,8 +476,8 @@ private:
             for (int x = 3; x < cols - 3; ++x)
             {
                 const float wob = std::sin (animPhase * 2.2f + (float) x * 0.19f) * 1.2f;
-                cell ((float) x, (float) groundY - 4 + wob, dim);
-                cell ((float) x, (float) groundY - 3 + wob, faint);
+                cell ((float) x, (float) groundY - 6 + wob, dim);
+                cell ((float) x, (float) groundY - 5 + wob, faint);
             }
 
         drawParticles (g, px, col, dim, faint);
@@ -364,6 +526,11 @@ private:
                         cell (d.x, d.y, juce::Colours::white.withMultipliedAlpha (a * 0.9f));
                         cell (d.x, d.y + 1, c.withMultipliedAlpha (a * 0.4f));
                         break;
+                    case 4:   // floating hollow square (mockup confetti)
+                        cell (d.x - 1, d.y - 1, faint); cell (d.x, d.y - 1, faint); cell (d.x + 1, d.y - 1, faint);
+                        cell (d.x - 1, d.y, faint);                                 cell (d.x + 1, d.y, faint);
+                        cell (d.x - 1, d.y + 1, faint); cell (d.x, d.y + 1, faint); cell (d.x + 1, d.y + 1, faint);
+                        break;
                     default:  // drip / debris / pill
                         cell (d.x, d.y, dim.withMultipliedAlpha (a));
                         if (state.theme >= 4)
@@ -374,7 +541,8 @@ private:
     }
 
     //==========================================================================
-    // Awaiting-signal scene, themed per cartridge with its own prompt.
+    // Awaiting-signal scene: theme weather + two pixel brawlers scrapping on
+    // the ground line, with knockbacks and pow flashes. Prompt blinks up top.
     void paintIdle (juce::Graphics& g, float px, int cols, int rows,
                     juce::Colour col, juce::Colour dim, juce::Colour faint, int groundY)
     {
@@ -394,8 +562,8 @@ private:
             for (int x = 3; x < cols - 3; ++x)
             {
                 const float wob = std::sin (animPhase * 2.0f + (float) x * 0.22f) * 1.3f;
-                const int top = groundY - 4 - rise + (int) wob;
-                for (int y = top; y <= groundY - 2; ++y)
+                const int top = groundY - 6 - rise + (int) wob;
+                for (int y = top; y <= groundY - 4; ++y)
                     cell ((float) x, (float) y, y == top ? dim : faint);
             }
         }
@@ -408,8 +576,32 @@ private:
             {
                 const int h = 1 + (int) (noise (x * 3) * (float) pile);
                 for (int dy = 0; dy < h; ++dy)
-                    cell ((float) x, (float) (groundY - 4 - dy),
+                    cell ((float) x, (float) (groundY - 5 - dy),
                           juce::Colours::white.withMultipliedAlpha (0.55f));
+            }
+        }
+
+        // ---- the trip: two pixel dudes fighting on the ground line
+        {
+            const int floorRow = groundY - 5;
+            const juce::Colour c1 = state.theme == 2 || state.theme == 5
+                ? tripGradient (std::fmod (animPhase * 0.3f, 1.0f)) : col;
+            const juce::Colour c2 = state.theme == 3 ? dim : juce::Colours::white
+                                        .withMultipliedAlpha (0.85f);
+            drawFighter (g, px, fight.x1, floorRow, fight.pose1, c1, true);
+            drawFighter (g, px, fight.x2, floorRow, fight.pose2, c2, false);
+
+            if (fight.powT > 0)
+            {
+                const float powRow = (float) floorRow - 30.0f;
+                const juce::Colour pc = ((int) (animPhase * 10.0f) & 1)
+                                            ? juce::Colours::white : col;
+                drawPixelText (g, px, (int) fight.powX - 2 * (int) fight.powWord.length(),
+                               (int) powRow, fight.powWord, pc, 1);
+                // impact star between them
+                cell (fight.powX, powRow + 9.0f, juce::Colours::white);
+                cell (fight.powX - 2, powRow + 7.0f, pc); cell (fight.powX + 2, powRow + 7.0f, pc);
+                cell (fight.powX - 2, powRow + 11.0f, pc); cell (fight.powX + 2, powRow + 11.0f, pc);
             }
         }
 
@@ -427,8 +619,102 @@ private:
         if (((int) (animPhase * 1.4f) & 1) == 0)
         {
             const int len = (int) juce::String (prompt).length();
-            drawPixelText (g, px, (cols - 4 * len) / 2, rows / 2 - 3, prompt, col, 1);
+            drawPixelText (g, px, (cols - 4 * len) / 2, 12, prompt, col, 1);
         }
+        juce::ignoreUnused (rows);
+    }
+
+    //==========================================================================
+    // Pixel brawlers: 7x10 sprites, four poses, drawn at 2-cell scale.
+    static const juce::uint8* fighterPose (int pose)
+    {
+        static const juce::uint8 stand[10] = { 0b0011000, 0b0011000, 0b0001000, 0b0111100,
+                                               0b1011010, 0b0011000, 0b0011000, 0b0010100,
+                                               0b0010100, 0b0110110 };
+        static const juce::uint8 walk[10]  = { 0b0011000, 0b0011000, 0b0001000, 0b0111100,
+                                               0b1011010, 0b0011000, 0b0011000, 0b0010100,
+                                               0b0100010, 0b1100011 };
+        static const juce::uint8 punch[10] = { 0b0011000, 0b0011000, 0b0001000, 0b0111111,
+                                               0b1011000, 0b0011000, 0b0011000, 0b0010100,
+                                               0b0010100, 0b0110110 };
+        static const juce::uint8 hit[10]   = { 0b0001100, 0b0001100, 0b0000100, 0b0011110,
+                                               0b0101101, 0b0001100, 0b0011000, 0b0010100,
+                                               0b0100100, 0b1100110 };
+        switch (pose)
+        {
+            case 1:  return walk;
+            case 2:  return punch;
+            case 3:  return hit;
+            default: return stand;
+        }
+    }
+
+    void drawFighter (juce::Graphics& g, float px, float xCentre, int floorRow,
+                      int pose, juce::Colour colour, bool faceRight)
+    {
+        const auto* rows10 = fighterPose (pose);
+        constexpr int scale = 2;
+        g.setColour (colour);
+        for (int r = 0; r < 10; ++r)
+            for (int c = 0; c < 7; ++c)
+            {
+                const int bit = faceRight ? c : 6 - c;
+                if (rows10[r] & (0b1000000 >> bit))
+                    g.fillRect ((xCentre + (float) ((c - 3) * scale)) * px,
+                                ((float) (floorRow - (10 - r) * scale)) * px,
+                                px * 0.88f * scale, px * 0.88f * scale);
+            }
+    }
+
+    struct Fight
+    {
+        float x1 = 30.0f, x2 = 120.0f;
+        int pose1 = 0, pose2 = 0, t1 = 0, t2 = 0;
+        int cool = 90, powT = 0;
+        float powX = 0, powY = 0;
+        juce::String powWord { "pow" };
+    };
+
+    void advanceFight (int cols)
+    {
+        auto& f = fight;
+        if (f.t1 > 0 && --f.t1 == 0) f.pose1 = 0;
+        if (f.t2 > 0 && --f.t2 == 0) f.pose2 = 0;
+        if (f.powT > 0) --f.powT;
+        if (f.cool > 0) --f.cool;
+
+        const float gap = f.x2 - f.x1;
+
+        // knockback while in the hit pose
+        if (f.pose1 == 3) f.x1 -= 0.7f;
+        if (f.pose2 == 3) f.x2 += 0.7f;
+
+        // approach when nobody is mid-move
+        if (f.pose1 == 0 && f.pose2 == 0 && gap > 13.0f)
+        {
+            f.x1 += 0.28f; f.x2 -= 0.28f;
+            const int step = ((int) (animPhase * 6.0f) & 1);
+            f.pose1 = step; f.pose2 = 1 - step;
+            if (f.pose1 == 1) f.t1 = 1;
+            if (f.pose2 == 1) f.t2 = 1;
+        }
+
+        // swing when close
+        if (gap <= 13.0f && f.cool == 0 && f.pose1 != 3 && f.pose2 != 3)
+        {
+            static const char* words[] = { "pow", "bap", "smack", "oof" };
+            f.powWord = words[rng.nextInt (4)];
+            if (rng.nextBool())  { f.pose1 = 2; f.t1 = 14; f.pose2 = 3; f.t2 = 22; }
+            else                 { f.pose2 = 2; f.t2 = 14; f.pose1 = 3; f.t1 = 22; }
+            f.powX = (f.x1 + f.x2) * 0.5f;
+            f.powY = 0.0f;   // set at draw: relative rows above floor
+            f.powT = 34;
+            f.cool = 60 + rng.nextInt (80);
+        }
+
+        f.x1 = juce::jlimit (12.0f, (float) cols - 26.0f, f.x1);
+        f.x2 = juce::jlimit (26.0f, (float) cols - 12.0f, f.x2);
+        if (f.x2 - f.x1 < 11.0f) { f.x1 -= 0.4f; f.x2 += 0.4f; }
     }
 
     //==========================================================================
@@ -626,6 +912,11 @@ private:
                 spawn (6.0f + rng.nextFloat() * (float) (cols - 12),
                        (float) rows * 0.28f + rng.nextFloat() * (float) rows * 0.4f,
                        0.0f, 0.03f, 1);
+
+            if (rng.nextFloat() < 0.10f)                     // floating hollow squares
+                spawn (6.0f + rng.nextFloat() * (float) (cols - 12),
+                       10.0f + rng.nextFloat() * (float) (rows - 40),
+                       (rng.nextFloat() - 0.5f) * 0.05f, -0.02f - rng.nextFloat() * 0.04f, 4);
         }
 
         for (auto& d : particles)
@@ -649,6 +940,7 @@ private:
 
     GeekEngine& engine;
     State state;
+    Fight fight;
     std::array<Particle, 160> particles;
     juce::Random rng;
     float animPhase = 0.0f;
