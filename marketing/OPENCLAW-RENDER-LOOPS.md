@@ -20,6 +20,65 @@ verbatim into each render job so output drops into the site with zero rework.
 
 ---
 
+## TOOLING & PIPELINE — NON-NEGOTIABLE
+
+**All rendering runs on fal.ai. Two models only, no substitutions:**
+
+- **Video → Seedance on fal** (`fal-ai/bytedance/seedance`, **image-to-video**
+  pro/1080p tier; confirm the current exact fal endpoint id at run time but the
+  model MUST be Seedance). Do NOT use Kling, Runway, Luma, Veo, or any other
+  video model. Every one of the 17 loops is generated the same way with the
+  same model + settings.
+- **Images → GPT Image 2 on fal** (`fal-ai/gpt-image-2`; confirm the current
+  exact fal endpoint id at run time). Only used if a source still is missing or
+  a theme/variant still is needed (e.g. a VocalGeek cartridge variant or the
+  hidden overdose theme). Do NOT use Flux, SDXL, Nano-Banana, Midjourney, or
+  anything else for image generation. Every generated image uses GPT Image 2.
+
+**Why image-to-video (mandatory):** the delivery spec requires the first frame
+to match the existing still poster. So seed Seedance with that plugin's still
+render as the input image — never text-to-video. The still is the frame-0 seed;
+Seedance only adds the subtle motion described in the prompt. This also
+guarantees the device geometry/material stays identical to the poster.
+
+**Per-job Seedance settings (identical for all 17 — this is what "consistent"
+means):**
+- input image = the plugin's still render (frame 0 / poster)
+- duration 6–8s, fps 24, longest side ≥ 720px (render higher, downscale on
+  export), aspect ratio = the still's aspect (do not crop/reframe)
+- motion strength LOW — a few degrees of float only; camera locked, no cuts,
+  no zoom, no orbit
+- prompt = the plugin's "Signature motion / Light / Live elements" lines below
+- fixed random seed per plugin, recorded, so re-runs reproduce
+
+**If images are generated with GPT Image 2, keep them consistent too:** feed
+the existing plate/UI art as the reference (`assets/ui/…`, the clean
+screenshots, or the VocalGeek `geek-*` sprites) so the design language —
+frosted white-glass plate, chrome edge + screws, SF Pro type, the theme's neon
+accent — matches the rest of the suite exactly. Same framing, same lighting,
+transparent/neutral background, no text.
+
+**Transparent-alpha note (Seedance outputs RGB, not alpha):** Seedance renders
+on a solid stage, so after generation extract the alpha yourself before export
+— matte/rotoscope the device (subject segmentation, refined from the still's
+known silhouette since the device is a single rigid centered object with only a
+few degrees of motion), then encode the MOV (hvc1) and WebM (VP9) WITH that
+alpha channel. The final files must have true transparency per the DELIVERY
+block; do not bake in any backdrop or shadow.
+
+### GLOBAL CONSISTENCY CONTRACT (applies to all 17 loops)
+
+Same across every plugin so the hero swaps feel like one product family:
+- identical float behavior: ~3–4° drift, ease-in/ease-out, ~6–8s period
+- one light-sweep pass per loop, same speed/feel (harder only for VocalGrit)
+- device centered, same margins, same aspect as its still, transparent bg
+- seamless loop (frame N → frame 0, no cut), 24fps, 720px wide export
+- accent glow = each plugin's neon color (pink default; Vocal2A amber; VocalGeek
+  per cartridge) — but the motion vocabulary is shared
+- Seedance for motion, GPT Image 2 for any stills — every time
+
+---
+
 ## 1. VocalTune — `vocaltune`
 
 Animate the VocalTune plugin UI as a seamless hero loop.
@@ -224,12 +283,14 @@ correlation/level meter eases toward center and holds.
 
 ```
 DELIVERY (web hero loop — must match exactly):
+- TOOLS (non-negotiable): video = Seedance on fal (image-to-video, seeded from
+  the still); any generated stills = GPT Image 2 on fal. No other models.
 - 6–8 second SEAMLESS loop (last frame flows into first, no visible cut)
 - 720px wide, 24fps, TRANSPARENT background (alpha channel, no backdrop/shadow baked in)
 - Export BOTH:
     • HEVC with alpha (hvc1) → <pluginId>.mov   (~0.8–1.5 Mbps)
     • VP9 with alpha (WebM)  → <pluginId>.webm  (~0.8 Mbps)
-- First frame MUST match the existing still render (it's used as the poster)
+- First frame MUST match the existing still render (it's used as the poster + the Seedance seed image)
 - Motion is subtle — device stays centered, only floats/rotates a few degrees
 - No text, no logos, no UI callouts, no captions
 ```
@@ -302,12 +363,14 @@ screen scene all change together — keep everything else identical.)
 
 ```
 DELIVERY (web hero loop — must match exactly):
+- TOOLS (non-negotiable): video = Seedance on fal (image-to-video, seeded from
+  the still); any generated stills = GPT Image 2 on fal. No other models.
 - 6–8 second SEAMLESS loop (last frame flows into first, no visible cut)
 - 720px wide, 24fps, TRANSPARENT background (alpha channel, no backdrop/shadow baked in)
 - Export BOTH:
     • HEVC with alpha (hvc1) → vocalgeek.mov   (~0.8–1.5 Mbps)
     • VP9 with alpha (WebM)  → vocalgeek.webm  (~0.8 Mbps)
-- First frame MUST match the existing still render (marketing/vocalgeek-refs/vocalgeek-lean.png — used as the poster)
+- First frame MUST match the existing still render (marketing/vocalgeek-refs/vocalgeek-lean.png — used as the poster + the Seedance seed image)
 - Motion is subtle — device stays centered, only floats/rotates a few degrees
 - No text, no logos, no UI callouts, no captions
 ```
