@@ -61,7 +61,7 @@ namespace licensing
             { "VocalBlend",   "3cf141d1-e3e2-432b-8ae1-c5c77509acfc" },
             { "VocalChop",    "57f02040-993f-4b79-924a-d064ea199b7b" },
             { "VocalClip",    "c7ada00e-501f-4ff3-aa03-f81d1507ae5d" },
-            { "VocalRack",    "d97d1149-f058-4c3c-a2e6-914f01d80fac" },
+            { "VocalGeek",    "28c55338-b57a-4749-bb0f-d90496bfc3f4" },
         };
         auto it = map.find (pluginName);
         return it != map.end() ? it->second : juce::String();

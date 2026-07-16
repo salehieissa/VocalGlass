@@ -32,7 +32,7 @@ PLUGINS = [
     "VocalGrit", "VocalEss", "VocalQ", "VocalKnob", "VocalAir", "VocalComp",
     "Vocal2A", "VocalTune", "VocalVerb", "VocalDoubler", "VocalDelay",
     "VocalGate", "VocalMod", "VocalBlend", "VocalChop",
-    "VocalClip", "VocalRack",
+    "VocalClip", "VocalGeek",
 ]
 SUITE_PRODUCT = "VocalEssential Suite"
 SUITE_CODE = "SUITE"

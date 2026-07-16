@@ -183,11 +183,7 @@ VocalGeekEditor::~VocalGeekEditor()
 void VocalGeekEditor::applyTheme (int themeIndex)
 {
     if (themeIndex == currentTheme) return;
-    const bool firstApply = currentTheme < 0;
     currentTheme = themeIndex;
-
-    if (! firstApply)
-        display.startSwap();
 
     if (plateBaked)
     {

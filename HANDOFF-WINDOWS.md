@@ -1,12 +1,72 @@
 # VocalEssential — Windows Build & Release Handoff
 
 You already know the suite — this is the **update handoff**. The catalog is now
-**16 plugins**; the update started with the photoreal UI rework, and five
-plugins are new since your last sync. The codebase is cross-platform JUCE 8 /
-CMake; nothing in the DSP or UI is macOS-specific (AU, universal-binary flag,
-notarization are guarded off on Windows).
+**17 plugins**; the update started with the photoreal UI rework, five plugins
+were new in the last sync, and **VocalGeek is brand new in this one**. The
+codebase is cross-platform JUCE 8 / CMake; nothing in the DSP or UI is
+macOS-specific (AU, universal-binary flag, notarization are guarded off on
+Windows).
 
-## UPDATES — Jul 7 2026 (read this first)
+## UPDATES — Jul 16 2026 (read this first)
+
+### YOUR TASK LIST for this sync (in order)
+
+1. `git pull` — the VocalGeek source, its `geek-*` skin assets, and the
+   updated `common/Licensing/LicenseConfig.h` (VocalGeek product id) are all
+   required; a stale checkout builds a plugin that can't activate.
+2. Build **VocalGeek** (VST3 + Standalone, Release, x64) with the same CMake
+   command as every other plugin. Project version is 1.0.0.
+3. QA it against the checklist at the bottom (item 6 is VocalGeek-specific);
+   activate with the QA key in §2 below.
+4. Produce `VocalGeek-1.0.0.msi` (same Inno/MSI pattern as the other singles:
+   VST3 → `{commoncf64}\VST3`, standalone optional component). Sign it.
+5. **Rebuild the suite installer** as `VocalEssential-Suite-1.0.0.msi` with
+   VocalGeek added (17 plugins). Sign it. The macOS side already shipped its
+   17-plugin suite pkg — the Windows suite is the missing half.
+6. Send back: `VocalGeek-1.0.0.msi`, the updated
+   `VocalEssential-Suite-1.0.0.msi`, a pluginval report for VocalGeek, and
+   `screenshots/windows/VocalGeek.png`. The mac side will splice them into the
+   combined `-mac-win.zip` downloads (suite + single) and hand the refreshed
+   files to the Shopify agent. Until your files arrive, the store's suite zip
+   ships a 17-plugin pkg + 16-plugin msi with a README note — so treat this
+   as time-sensitive.
+
+### What's new in detail
+
+1. **New plugin: VocalGeek** (`Vgek`) — the handheld "dose console". A Game
+   Boy-style vocal performance FX unit: five cartridges (lean / smoke / acid /
+   snow / geeked, each a different DSP chain + full UI recolor), a code-drawn
+   pixel screen with per-theme reactive waveform scenes, HIT A stutter /
+   HIT B tape-stop pads, PRINT freeze with drag-to-DAW WAV export, tempo-synced
+   AUTO pilot, D-pad texture/space nudges, and a hidden 6th cartridge behind a
+   D-pad cheat code (up up down down left left right right).
+   - Same per-folder CMake pattern; added to the build lists below.
+   - `NEEDS_MIDI_INPUT TRUE` (unique in the suite): C1 holds HIT A, D1 holds
+     HIT B, E1 taps the rate. Verify the VST3 receives MIDI in FL/Ableton.
+   - Skin assets are the `geek-*` PNGs in `assets/ui/` (embedded like all
+     others). Pull latest — the pixel-screen code and assets are new.
+   - Its CMakeLists also defines a small console target `GeekScreenPreview`
+     (offscreen screen-renderer used for visual QA on mac; it writes to
+     `/tmp`). It will compile on Windows if you build the whole solution —
+     ignore it, don't ship it, or build the specific plugin targets only.
+   - Per-cartridge settings memory: each cartridge remembers its own
+     dose/texture/space/rate/auto/output within a session and in saved DAW
+     state — worth a quick QA pass (set dose on two cartridges, swap back and
+     forth, reload the project).
+   - Drag the PRINT pill to the DAW/desktop to export the frozen loop as WAV
+     (JUCE `performExternalDragDropOfFiles` — cross-platform, but verify on
+     Windows).
+2. **VocalGeek licensing is provisioned** (nothing for you to create):
+   Keygen product `28c55338-b57a-4749-bb0f-d90496bfc3f4`, policy "VocalGeek –
+   Perpetual" `38f91492-884c-4ee1-8e51-af33203be12d`, product id already
+   patched into `common/Licensing/LicenseConfig.h`. Internal QA key you can
+   activate with (2 machines, floating):
+   `ACC160-604AA4-FF6FE4-B362B2-6F90B2-V3`. Suite keys unlock VocalGeek too.
+3. **Version note**: VocalGeek's project version is currently `0.1.0` — ship
+   its first Windows installer as `1.0.0` to match the catalog (that is also
+   the plan for the next macOS pkg pass).
+
+## UPDATES — Jul 7 2026
 
 1. **New plugins (5)**: VocalMod (`Vmod`), VocalBlend (`Vbld`), VocalChop
    (`Vchp`), VocalClip (`Vclp`), VocalGate (`Vgat`). Same per-folder CMake
@@ -38,7 +98,7 @@ notarization are guarded off on Windows).
      `screenshots/windows/<Name>.png`. Layouts should match the macOS shots
      pixel-for-pixel (the UI is a scaled bitmap plate).
 
-## The suite (16 plugins)
+## The suite (17 plugins)
 
 | Plugin | Code | What it is |
 |---|---|---|
@@ -58,6 +118,7 @@ notarization are guarded off on Windows).
 | VocalBlend | `Vbld` | master-bus vocal/beat glue — **new** |
 | VocalChop | `Vchp` | tempo-synced chopper — **new, hero plugin** |
 | VocalClip | `Vclp` | soft clipper (3 shapes, 4x OS, live transfer curve) — **new** |
+| VocalGeek | `Vgek` | handheld dose console: cartridge FX + pixel screen — **NEW this sync** |
 
 All share `PLUGIN_MANUFACTURER_CODE Vgls`, company "VocalEssential".
 
@@ -78,7 +139,7 @@ CMakeLists). Formats on Windows: **VST3 + Standalone** (AU is macOS-only and
 is skipped automatically by JUCE).
 
 ```bat
-:: from the repo root, for each of the 16 plugin folders:
+:: from the repo root, for each of the 17 plugin folders:
 cmake -S Vocal2A -B Vocal2A\build-win -G "Visual Studio 17 2022" -A x64
 cmake --build Vocal2A\build-win --config Release
 ```
@@ -100,7 +161,7 @@ Batch-build everything (PowerShell):
 ```powershell
 $plugins = "VocalGrit","VocalEss","VocalQ","VocalKnob","VocalAir","VocalComp",
            "Vocal2A","VocalTune","VocalVerb","VocalDoubler","VocalDelay",
-           "VocalGate","VocalMod","VocalBlend","VocalChop","VocalClip"
+           "VocalGate","VocalMod","VocalBlend","VocalChop","VocalClip","VocalGeek"
 foreach ($p in $plugins) {
   cmake -S $p -B "$p\build-win" -G "Visual Studio 17 2022" -A x64
   cmake --build "$p\build-win" --config Release
@@ -166,7 +227,7 @@ Version all installers `1.0.0` to match the macOS release.
 
 ## QA checklist before shipping
 
-1. All 16 build clean in Release (no warnings-as-errors are enabled, but check
+1. All 17 build clean in Release (no warnings-as-errors are enabled, but check
    the log for anything alarming).
 2. Load each VST3 in a Windows DAW (FL Studio + Ableton minimum). Confirm:
    - UI renders the photoreal plate edge-to-edge (crop-to-chrome), no dark
@@ -174,15 +235,21 @@ Version all installers `1.0.0` to match the macOS release.
      arcs track every knob.
    - Automation: move every knob from the DAW side, UI follows.
    - VocalChop/VocalDelay tempo-sync follow host BPM and restart on the grid.
-3. `pluginval` (Tracktion, free) at strictness 5+ on all 16 VST3s.
+3. `pluginval` (Tracktion, free) at strictness 5+ on all 17 VST3s.
 4. Activation overlay + license flow on at least 2 plugins (one single, one
-   suite key).
+   suite key). For VocalGeek use the QA key in UPDATES §2.
 5. HiDPI: check 100% / 150% / 200% scaling — the UI is a scaled bitmap plate,
    it should stay crisp (JUCE handles DPI); look for blurry text at 200%.
+6. VocalGeek-specific: cartridge click cycles all five themes (bay art, button
+   color, screen scene all change together, no swap/loading screen — it's
+   instant); pixel screen animates (idle scene after ~5s of silence); MIDI
+   C1/D1 trigger the hit pads; PRINT drag exports a WAV; the D-pad cheat code
+   (up up down down left left right right) unlocks the overdose cartridge;
+   per-cartridge settings memory survives a project reload.
 
 ## Deliverables back
 
-- `VocalEssential-Suite-1.0.0.exe` + 16 single installers, all signed.
+- `VocalEssential-Suite-1.0.0.exe` + 17 single installers, all signed.
 - A short build log (which VS/SDK versions used).
 - pluginval reports (txt) per plugin.
 - `screenshots/windows/<Name>.png` per plugin (see UPDATES §4).

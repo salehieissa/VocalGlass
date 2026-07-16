@@ -52,7 +52,7 @@ SUITE_NAME="VocalEssential-Suite"
 PLUGINS=(
     VocalGrit VocalEss VocalQ VocalKnob VocalAir VocalComp
     Vocal2A VocalTune VocalVerb VocalDoubler VocalDelay
-    VocalGate VocalMod VocalBlend VocalChop VocalClip
+    VocalGate VocalMod VocalBlend VocalChop VocalClip VocalGeek
 )
 
 NOTARY_PROFILE="${NOTARY_PROFILE:-VocalEssential}"

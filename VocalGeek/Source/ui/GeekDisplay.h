@@ -50,8 +50,6 @@ public:
         repaint();
     }
 
-    void startSwap()  { swapEnd = juce::Time::getMillisecondCounter() + 450; }
-
     void showHud (const juce::String& name, float value01)
     {
         hudName = name;
@@ -169,7 +167,6 @@ private:
         const auto col = phosphor (state.theme);
 
         if (now < bootEnd)   { paintBoot (g, px, cols, rows, now); return; }
-        if (now < swapEnd)   { paintSwap (g, px, cols, rows); return; }
 
         const auto dim   = col.withMultipliedBrightness (0.55f);
         const auto faint = col.withMultipliedBrightness (0.28f);
@@ -196,8 +193,13 @@ private:
         const bool idle = quietFrames > idleAfterFrames;
         const int groundY = rows - 36;
 
-        paintDecor  (g, px, cols, rows, col, dim, faint);
-        paintGround (g, px, cols, groundY, col, dim, faint);
+        paintDecor (g, px, cols, rows, col, dim, faint);
+
+        // acid's melt tendrils reach the floor in the mockup — no ground band
+        // under them while audio is running
+        const bool acidLive = (state.theme == 2 || state.theme == 5) && ! idle;
+        if (! acidLive)
+            paintGround (g, px, cols, groundY, col, dim, faint);
 
         if (idle)
             paintIdle (g, px, cols, rows, col, dim, faint, groundY);
@@ -353,13 +355,53 @@ private:
     }
 
     //==========================================================================
-    // Live scene: the waveform, dressed per cartridge to match the approved
-    // screen mockups — lean drips syrup, smoke exhales textured plumes off the
-    // wave, acid melts through an orange->pink->blue gradient with wiggling
-    // tendrils, snow hangs icicles under a flurry, geeked glitches into
-    // blocks. Overdose stacks the acid gradient on everything.
+    // Live scene. Each cartridge composes the WHOLE screen differently — the
+    // effect IS the waveform, matching the approved mockups:
+    //   lean     — thick pink wave sagging into heavy drips over a syrup pool
+    //   smoke    — wave hangs as drips off a baseline, plumes billow up off it
+    //   acid     — one huge melting gradient curtain, tendrils curl to the floor
+    //   snow     — bright white mirrored wave, icicles beneath, flurry around
+    //   geeked   — quantized glitch wave: dropouts, tears, hot pixels
+    //   overdose — the acid curtain, glitched
     void paintWave (juce::Graphics& g, float px, int cols, int rows,
                     juce::Colour col, juce::Colour dim, juce::Colour faint, int groundY)
+    {
+        juce::ignoreUnused (rows);
+
+        // sample the scope into a smoothed per-column envelope first, so every
+        // theme draws from the same organic outline
+        const int x0 = 4, x1 = cols - 4, span = x1 - x0;
+        const int w = engine.scopeWrite.load();
+        const int N = (int) engine.scope.size();
+        std::array<float, gridCols> raw {};
+        for (int x = x0; x < x1; ++x)
+        {
+            const int idx = (w + N * 12 - (span - (x - x0)) * N / span) % N;
+            raw[(size_t) x] = juce::jlimit (0.0f, 1.0f, engine.scope[(size_t) idx] * 1.6f);
+        }
+        for (int x = x0; x < x1; ++x)
+        {
+            float s = 0.0f; int n = 0;
+            for (int k = -2; k <= 2; ++k)
+                if (x + k >= x0 && x + k < x1) { s += raw[(size_t) (x + k)]; ++n; }
+            env[(size_t) x] = s / (float) n;
+        }
+
+        switch (state.theme)
+        {
+            case 1:  paintWaveSmoke  (g, px, cols, groundY, col, dim);        break;
+            case 2:  paintWaveAcid   (g, px, cols, groundY, false);           break;
+            case 3:  paintWaveSnow   (g, px, cols, groundY, col, faint);      break;
+            case 4:  paintWaveGeeked (g, px, cols, groundY, col, dim);        break;
+            case 5:  paintWaveAcid   (g, px, cols, groundY, true);            break;
+            default: paintWaveLean   (g, px, cols, groundY, col, dim, faint); break;
+        }
+
+        drawParticles (g, px, col, dim, faint);
+    }
+
+    void paintWaveLean (juce::Graphics& g, float px, int cols, int groundY,
+                        juce::Colour col, juce::Colour dim, juce::Colour faint)
     {
         auto cell = [&] (float cx, float cy, juce::Colour c)
         {
@@ -368,133 +410,305 @@ private:
             g.fillRect (cx * px + (px - s) * 0.5f, cy * px + (px - s) * 0.5f, s, s);
         };
 
-        juce::ignoreUnused (rows);
-        const int theme = state.theme;
-        const bool trippy  = theme == 2 || theme == 5;    // gradient + tendrils
-        const bool glitchy = theme == 4 || theme == 5;    // blocky + tears
-        const bool icy     = theme == 3;
+        const int waveTop = 22, waveBot = groundY - 12;
+        const int waveMid = (waveTop + waveBot) / 2 - 4;
+        const int halfSpan = waveMid - waveTop;
+
+        for (int x = 4; x < cols - 4; ++x)
+        {
+            const float v = env[(size_t) x];
+            const int hUp = juce::jmax (1, (int) (v * (float) halfSpan * 0.9f));
+            // the bottom half sags — syrup is heavy
+            const int hDn = juce::jmax (1, (int) (v * (float) halfSpan
+                                                    * (1.0f + 0.4f * noise (x * 9 + 2))));
+            for (int dy = 0; dy < hUp; ++dy)
+            {
+                const float knit = 0.78f + 0.22f * noise (x * 5 + dy * 11);
+                const float fade = 1.0f - 0.4f * (float) dy / (float) juce::jmax (1, halfSpan);
+                cell ((float) x, (float) (waveMid - dy),
+                      col.withMultipliedBrightness (fade * knit));
+            }
+            for (int dy = 0; dy < hDn; ++dy)
+            {
+                const float knit = 0.78f + 0.22f * noise (x * 5 + dy * 13);
+                const float fade = 1.0f - 0.45f * (float) dy / (float) juce::jmax (1, halfSpan);
+                cell ((float) x, (float) (waveMid + dy),
+                      col.withMultipliedBrightness (fade * knit * 0.92f));
+            }
+
+            // heavy drips off most columns, fat drop at the tip
+            if (v > 0.08f && noise (x * 31 + 7) > 0.45f)
+            {
+                const int trail = 3 + (int) (v * 26.0f * (0.4f + noise (x * 13 + 3)));
+                int tipY = waveMid + hDn;
+                for (int t = 0; t < trail; ++t)
+                {
+                    const int y = waveMid + hDn + t;
+                    if (y > groundY - 9) break;
+                    tipY = y;
+                    cell ((float) x, (float) y,
+                          dim.withMultipliedAlpha (0.95f - 0.7f * (float) t / (float) trail));
+                }
+                if (trail > 6)
+                    cell ((float) x, (float) tipY, col.withMultipliedAlpha (0.85f));
+            }
+        }
+
+        // wobbling syrup pool sitting on the ground band
+        for (int x = 4; x < cols - 4; ++x)
+        {
+            const float wob = std::sin (animPhase * 2.2f + (float) x * 0.13f) * 1.6f;
+            const int top = (int) ((float) groundY - 9.0f + wob);
+            cell ((float) x, (float) top,     col.withMultipliedBrightness (0.8f));
+            cell ((float) x, (float) top + 1, dim);
+            cell ((float) x, (float) top + 2, faint);
+        }
+    }
+
+    void paintWaveSmoke (juce::Graphics& g, float px, int cols, int groundY,
+                         juce::Colour col, juce::Colour dim)
+    {
+        auto cell = [&] (float cx, float cy, juce::Colour c)
+        {
+            const float s = px * 0.82f;
+            g.setColour (c);
+            g.fillRect (cx * px + (px - s) * 0.5f, cy * px + (px - s) * 0.5f, s, s);
+        };
+
+        const int waveTop = 20;
+        const int baseY = waveTop + (int) ((float) (groundY - 12 - waveTop) * 0.62f);
+
+        // the wave hangs BELOW the baseline as green drips of varying length
+        for (int x = 4; x < cols - 4; ++x)
+        {
+            const float v = env[(size_t) x];
+            const int len = 2 + (int) (v * 34.0f * (0.45f + 0.8f * noise (x * 13)));
+            for (int t = 0; t <= len; ++t)
+            {
+                const int y = baseY + t;
+                if (y > groundY - 9) break;
+                const float a = 1.0f - 0.6f * (float) t / (float) juce::jmax (1, len);
+                const float knit = 0.75f + 0.25f * noise (x * 5 + t * 11);
+                cell ((float) x, (float) y, col.withMultipliedBrightness (a * knit));
+            }
+        }
+
+        // plumes billowing up off the line: each is a chain of fat overlapping
+        // blobs that widen and thin out as they rise, swaying together
+        for (int k = 0; k < 12; ++k)
+        {
+            const int rootX = 12 + (k * 18 + (int) (noise (k * 37) * 9.0f)) % (cols - 24);
+            const float str = env[(size_t) juce::jlimit (4, cols - 5, rootX)];
+            if (str < 0.04f) continue;
+            const int H = juce::jmin (baseY - waveTop + 4,
+                                      (int) ((0.45f + str) * (float) (baseY - waveTop)));
+            float cx = (float) rootX;
+            for (int t = 0; t < H; t += 3)
+            {
+                const int y = baseY - 3 - t;
+                if (y < waveTop - 4) break;
+                const float rise = (float) t / (float) juce::jmax (1, H);
+                cx = (float) rootX
+                   + std::sin ((float) t * 0.10f + animPhase * 1.1f + (float) k * 1.7f)
+                       * (2.0f + (float) t * 0.14f)
+                   + std::sin ((float) t * 0.031f + (float) k * 0.9f) * 3.0f;
+                const float rad = juce::jmin (10.0f,
+                    2.2f + (float) t * 0.14f + 2.0f * noise (k * 11 + t / 3));
+
+                // one solid dithered blob per segment (3 rows tall)
+                for (int dy = -1; dy <= 2; ++dy)
+                    for (int dx = (int) -rad; dx <= (int) rad; ++dx)
+                    {
+                        const float rr = std::sqrt ((float) (dx * dx)
+                                                    + (float) (dy * dy) * 2.2f) / rad;
+                        if (rr > 1.0f) continue;
+                        const float body = (1.0f - rr * rr) * (1.0f - 0.55f * rise);
+                        // dense core, dithered skin
+                        if (rr < 0.55f || noise (rootX * 3 + t * 7 + dx * 13 + dy * 29 + k)
+                                              < body + 0.25f)
+                            cell (cx + (float) dx, (float) (y + dy),
+                                  (rr < 0.45f ? col : dim).withMultipliedAlpha (
+                                      juce::jlimit (0.15f, 0.9f,
+                                          0.30f + 0.65f * body
+                                              * (0.7f + 0.3f * noise (dx * 5 + t)))));
+                    }
+            }
+        }
+    }
+
+    void paintWaveAcid (juce::Graphics& g, float px, int cols, int groundY, bool glitched)
+    {
+        auto cell = [&] (float cx, float cy, juce::Colour c)
+        {
+            const float s = px * 0.82f;
+            g.setColour (c);
+            g.fillRect (cx * px + (px - s) * 0.5f, cy * px + (px - s) * 0.5f, s, s);
+        };
+
+        const int waveTop = 16;
+        const int meltBase = waveTop + (int) ((float) (groundY - waveTop) * 0.52f);
+
+        auto meltEdge = [&] (int x) -> int
+        {
+            return meltBase + (int) (std::sin ((float) x * 0.045f + animPhase * 0.5f) * 5.0f
+                                     + noise (x * 3) * 3.0f);
+        };
+
+        // the curtain: flame-spiked top edge, gradient body down to the melt line
+        for (int x = 4; x < cols - 4; ++x)
+        {
+            const float v = env[(size_t) x];
+            if (glitched && noise (x * 41 + 5) > 0.94f) continue;          // dropout
+            int xd = x;
+            if (glitched && noise (x * 17 + 9) > 0.90f)
+                xd = x + (int) ((noise (x * 23) - 0.5f) * 7.0f);           // tear
+
+            const float flick = (noise (x * 7 + 1) - 0.5f) * (6.0f + 10.0f * v);
+            const int topY = juce::jmax (waveTop,
+                (int) ((float) meltBase - 8.0f - v * (float) (meltBase - waveTop - 6) + flick));
+            const int meltY = meltEdge (x);
+
+            for (int y = topY; y <= meltY; ++y)
+            {
+                if (noise (x * 5 + y * 11) < 0.16f) continue;              // knit holes
+                const float tl = (float) (y - topY) / (float) juce::jmax (1, meltY - topY);
+                const float tg = (float) (y - waveTop) / (float) juce::jmax (1, groundY - waveTop);
+                const float t = juce::jlimit (0.0f, 1.0f,
+                    0.55f * tl + 0.45f * tg + std::sin (animPhase * 0.6f) * 0.05f);
+                cell ((float) xd, (float) y,
+                      tripGradient (t).withMultipliedBrightness (
+                          0.75f + 0.25f * noise (x * 13 + y * 7)));
+            }
+
+            if (v > 0.3f && noise (x * 29 + 4) > 0.94f)                    // flame sparks
+                cell ((float) xd, (float) (topY - 2 - (int) (noise (x * 11) * 5.0f)),
+                      tripGradient (0.0f));
+        }
+
+        // melting tendrils: 2-wide streams flowing off the melt line, wiggle
+        // amplitude grows with depth so they curl near the floor
+        for (int k = 0; k < 26; ++k)
+        {
+            const int rootX = 7 + (k * 8 + (int) (noise (k * 53) * 5.0f)) % (cols - 14);
+            const float str = env[(size_t) juce::jlimit (4, cols - 5, rootX)];
+            const int meltY = meltEdge (rootX);
+            const int reach = (int) ((0.3f + str) * (float) (groundY - 4 - meltY));
+            for (int t = 0; t < reach; ++t)
+            {
+                const int y = meltY + t;
+                if (y > groundY - 2) break;
+                const float depth = (float) t / (float) juce::jmax (1, reach);
+                const float wig = std::sin ((float) y * 0.13f + animPhase * 1.5f
+                                            + (float) k * 2.1f)
+                                  * (1.0f + depth * depth * 9.0f);
+                const float tg = juce::jlimit (0.0f, 1.0f,
+                    (float) (y - waveTop) / (float) (groundY - waveTop));
+                const auto c = tripGradient (tg).withMultipliedAlpha (0.95f - 0.35f * depth);
+                cell ((float) rootX + wig,        (float) y, c);
+                cell ((float) rootX + wig + 1.0f, (float) y, c.withMultipliedAlpha (0.7f));
+            }
+        }
+    }
+
+    void paintWaveSnow (juce::Graphics& g, float px, int cols, int groundY,
+                        juce::Colour col, juce::Colour faint)
+    {
+        auto cell = [&] (float cx, float cy, juce::Colour c)
+        {
+            const float s = px * 0.82f;
+            g.setColour (c);
+            g.fillRect (cx * px + (px - s) * 0.5f, cy * px + (px - s) * 0.5f, s, s);
+        };
+
+        const int waveTop = 22, waveBot = groundY - 12;
+        const int waveMid = (waveTop + waveBot) / 2 - 8;    // sits high like the mockup
+        const int halfSpan = waveMid - waveTop;
+
+        for (int x = 4; x < cols - 4; ++x)
+        {
+            const float v = env[(size_t) x];
+            const int h = juce::jmax (1, (int) (v * (float) halfSpan));
+            const float colTex = (x & 1) == 0 ? 1.0f : 0.8f;   // fine column texture
+            for (int dy = 0; dy < h; ++dy)
+            {
+                const float t = (float) dy / (float) juce::jmax (1, halfSpan);
+                const auto c = juce::Colours::white.interpolatedWith (col, t * 0.75f);
+                cell ((float) x, (float) (waveMid - dy), c.withMultipliedBrightness (colTex));
+                cell ((float) x, (float) (waveMid + dy), c.withMultipliedBrightness (colTex * 0.9f));
+            }
+
+            // icicles: dotted white drips under the wave with a bright tip
+            if (v > 0.1f && noise (x * 31 + 7) > 0.55f)
+            {
+                const int len = 3 + (int) (v * 26.0f * noise (x * 13 + 3));
+                int tipY = waveMid + h;
+                for (int t = 0; t < len; ++t)
+                {
+                    const int y = waveMid + h + t;
+                    if (y > groundY - 10) break;
+                    tipY = y;
+                    if (((x + t) % 3) == 0) continue;
+                    cell ((float) x, (float) y,
+                          juce::Colours::white.withMultipliedAlpha (
+                              0.85f - 0.6f * (float) t / (float) len));
+                }
+                cell ((float) x, (float) tipY, juce::Colours::white);
+            }
+
+            // hollow blocks hovering above the peaks
+            if (v > 0.25f && noise (x * 47 + 5) > 0.965f)
+            {
+                const int y = waveMid - h - 4 - (int) (noise (x * 7) * 6.0f);
+                for (int dx = -1; dx <= 1; ++dx)
+                {
+                    cell ((float) (x + dx), (float) (y - 1), faint);
+                    cell ((float) (x + dx), (float) (y + 1), faint);
+                }
+                cell ((float) (x - 1), (float) y, faint);
+                cell ((float) (x + 1), (float) y, faint);
+            }
+        }
+    }
+
+    void paintWaveGeeked (juce::Graphics& g, float px, int cols, int groundY,
+                          juce::Colour col, juce::Colour dim)
+    {
+        auto cell = [&] (float cx, float cy, juce::Colour c)
+        {
+            const float s = px * 0.82f;
+            g.setColour (c);
+            g.fillRect (cx * px + (px - s) * 0.5f, cy * px + (px - s) * 0.5f, s, s);
+        };
 
         const int waveTop = 22, waveBot = groundY - 12;
         const int waveMid = (waveTop + waveBot) / 2;
         const int halfSpan = (waveBot - waveTop) / 2;
 
-        auto waveColour = [&] (int y, float fade) -> juce::Colour
-        {
-            if (trippy)
-            {
-                const float t = juce::jlimit (0.0f, 1.0f,
-                    ((float) y - (float) waveTop) / (float) (waveBot - waveTop)
-                        + std::sin (animPhase * 0.7f) * 0.06f);
-                return tripGradient (t).withMultipliedBrightness (0.7f + 0.3f * fade);
-            }
-            if (icy)
-                return juce::Colours::white.interpolatedWith (col, 1.0f - fade * 0.7f)
-                           .withMultipliedBrightness (0.75f + 0.25f * fade);
-            return col.withMultipliedBrightness (fade);
-        };
-
-        const int w = engine.scopeWrite.load();
-        const int span = cols - 8;
         for (int x = 4; x < cols - 4; ++x)
         {
-            const int idx = (w + (int) engine.scope.size() * 12
-                               - (span - (x - 4)) * (int) engine.scope.size() / span)
-                            % (int) engine.scope.size();
-            float v = juce::jlimit (0.0f, 1.0f, engine.scope[(size_t) idx] * 1.6f);
-
-            // geeked: quantize the envelope into chunky blocks + column dropouts
-            int xDraw = x;
-            if (glitchy)
-            {
-                v = std::round (v * 5.0f) / 5.0f;
-                if (noise (x * 41 + 5) > 0.94f) continue;                 // dropout
-                if (noise (x * 17 + 9) > 0.90f)
-                    xDraw = x + (int) ((noise (x * 23) - 0.5f) * 7.0f);   // tear
-            }
+            const float v = std::round (env[(size_t) x] * 5.0f) / 5.0f;   // chunky steps
+            if (noise (x * 41 + 5) > 0.94f) continue;                     // dropout
+            int xd = x;
+            if (noise (x * 17 + 9) > 0.90f)
+                xd = x + (int) ((noise (x * 23) - 0.5f) * 7.0f);          // tear
 
             const int h = juce::jmax (1, (int) (v * (float) halfSpan));
             for (int dy = 0; dy < h; ++dy)
             {
                 const float fade = 1.0f - 0.5f * (float) dy / (float) juce::jmax (1, halfSpan);
                 const float knit = 0.78f + 0.22f * noise (x * 5 + dy * 11);
-                cell ((float) xDraw, (float) (waveMid - dy),
-                      waveColour (waveMid - dy, fade).withMultipliedBrightness (knit));
-                cell ((float) xDraw, (float) (waveMid + dy),
-                      waveColour (waveMid + dy, fade * 0.9f).withMultipliedBrightness (knit));
+                cell ((float) xd, (float) (waveMid - dy), col.withMultipliedBrightness (fade * knit));
+                cell ((float) xd, (float) (waveMid + dy), col.withMultipliedBrightness (fade * knit * 0.9f));
             }
-            if (glitchy && v > 0.1f && noise (x * 29 + 1) > 0.93f)        // hot pixel
-                cell ((float) xDraw, (float) (waveMid - h - 1), juce::Colours::white);
+            if (v > 0.1f && noise (x * 29 + 1) > 0.93f)                   // hot pixel
+                cell ((float) xd, (float) (waveMid - h - 1), juce::Colours::white);
 
-            // ---- per-theme dressing hanging off / rising from the wave ----
-            const float seed = noise (x * 31 + 7);
-
-            if ((theme == 0 || theme == 5) && v > 0.2f && seed > 0.78f)
-            {   // lean: syrup drips
-                const int trail = (int) (v * 18.0f * noise (x * 13 + 3)) + 3;
-                for (int t = 0; t < trail; ++t)
-                    cell ((float) x, (float) (waveMid + h + t),
-                          dim.withMultipliedAlpha (1.0f - (float) t / (float) trail));
-            }
-
-            if (trippy && v > 0.15f && seed > 0.72f)
-            {   // acid: melting tendrils wiggling to the ground
-                const int reach = juce::jmin (groundY - 8 - (waveMid + h),
-                                              (int) (v * 42.0f * noise (x * 13 + 3)) + 8);
-                for (int t = 0; t < reach; ++t)
-                {
-                    const int y = waveMid + h + t;
-                    const float wig = std::sin ((float) y * 0.20f + animPhase * 2.0f
-                                                + (float) x * 0.7f)
-                                      * (1.0f + (float) t * 0.09f);
-                    const float tt = juce::jlimit (0.0f, 1.0f,
-                        ((float) y - (float) waveTop) / (float) (waveBot - waveTop));
-                    cell ((float) x + wig, (float) y,
-                          tripGradient (tt).withMultipliedAlpha (
-                              0.9f - 0.5f * (float) t / (float) juce::jmax (1, reach)));
-                }
-            }
-
-            if (theme == 1 && v > 0.18f && seed > 0.74f)
-            {   // smoke: textured plume rising off the wave crest
-                const int reach = juce::jmin (waveMid - h - waveTop + 8,
-                                              (int) (v * 38.0f * noise (x * 13 + 3)) + 10);
-                for (int t = 0; t < reach; ++t)
-                {
-                    const int y = waveMid - h - t;
-                    const float swy = std::sin ((float) y * 0.16f + animPhase * 1.6f
-                                                + (float) x * 0.5f)
-                                      * (1.0f + (float) t * 0.12f);
-                    const float a = 0.8f - 0.6f * (float) t / (float) juce::jmax (1, reach);
-                    const float wid = 1.0f + (float) t * 0.14f;
-                    for (int dx = (int) -wid; dx <= (int) wid; ++dx)
-                        if (noise (x * 3 + t * 7 + dx * 13) > 0.42f)
-                            cell ((float) x + swy + (float) dx, (float) y,
-                                  dim.withMultipliedAlpha (a * (0.5f + 0.5f * noise (t * 5 + dx))));
-                }
-            }
-
-            if (icy && v > 0.2f && seed > 0.80f)
-            {   // snow: icicles hanging under the wave
-                const int len = (int) (v * 20.0f * noise (x * 13 + 3)) + 4;
-                for (int t = 0; t < len; ++t)
-                    cell ((float) x, (float) (waveMid + h + t),
-                          juce::Colours::white.withMultipliedAlpha (
-                              0.85f - 0.6f * (float) t / (float) len));
-                cell ((float) x, (float) (waveMid + h + len),
-                      col.withMultipliedAlpha (0.5f));
-            }
+            // horizontal tear bars streaking across
+            if (noise (x * 61 + 3) > 0.985f)
+                for (int dx = 0; dx < 10 && x + dx < cols - 4; ++dx)
+                    cell ((float) (x + dx),
+                          (float) (waveMid - (int) (noise (x * 5) * (float) halfSpan)), dim);
         }
-
-        // lean: wobbling syrup pool sitting on the ground band
-        if (theme == 0 || theme == 5)
-            for (int x = 4; x < cols - 4; ++x)
-            {
-                const float wob = std::sin (animPhase * 2.2f + (float) x * 0.13f) * 1.6f;
-                cell ((float) x, (float) groundY - 9 + wob, dim);
-                cell ((float) x, (float) groundY - 8 + wob, faint);
-            }
-
-        drawParticles (g, px, col, dim, faint);
     }
 
     // shared particle renderer (kinds: 0 drip/debris, 1 diamond, 2 puff,
@@ -542,10 +756,16 @@ private:
                         cell (d.x, d.y + 1, c.withMultipliedAlpha (a * 0.4f));
                         break;
                     case 4:   // floating hollow square (mockup confetti)
-                        cell (d.x - 1, d.y - 1, faint); cell (d.x, d.y - 1, faint); cell (d.x + 1, d.y - 1, faint);
-                        cell (d.x - 1, d.y, faint);                                 cell (d.x + 1, d.y, faint);
-                        cell (d.x - 1, d.y + 1, faint); cell (d.x, d.y + 1, faint); cell (d.x + 1, d.y + 1, faint);
+                    {
+                        const auto sq = trippy
+                            ? juce::Colour::fromHSV (d.hue, 0.85f, 1.0f, 1.0f)
+                                  .withMultipliedAlpha (0.75f * a)
+                            : faint;
+                        cell (d.x - 1, d.y - 1, sq); cell (d.x, d.y - 1, sq); cell (d.x + 1, d.y - 1, sq);
+                        cell (d.x - 1, d.y, sq);                              cell (d.x + 1, d.y, sq);
+                        cell (d.x - 1, d.y + 1, sq); cell (d.x, d.y + 1, sq); cell (d.x + 1, d.y + 1, sq);
                         break;
+                    }
                     default:  // drip / debris / pill
                         cell (d.x, d.y, dim.withMultipliedAlpha (a));
                         if (state.theme >= 4)
@@ -756,20 +976,6 @@ private:
         }
     }
 
-    void paintSwap (juce::Graphics& g, float px, int cols, int rows)
-    {
-        const auto col = phosphor (state.theme);
-        // one frame of static
-        for (int i = 0; i < 700; ++i)
-        {
-            const float x = rng.nextFloat() * (float) cols;
-            const float y = rng.nextFloat() * (float) rows;
-            g.setColour (col.withMultipliedAlpha (rng.nextFloat() * 0.5f));
-            g.fillRect (x * px, y * px, px * 0.85f, px * 0.85f);
-        }
-        drawPixelText (g, px, (cols - 8 * 15) / 2, rows / 2 - 5, "loading dose...", col, 2);
-    }
-
     // faint scanlines + corner vignette so the grid reads as a lit LCD.
     // Drawn on the component (not the buffer) so they stay hairline-thin.
     void paintGlassOverlay (juce::Graphics& g, float cellPx, int rows)
@@ -927,7 +1133,9 @@ private:
                        (float) rows * 0.28f + rng.nextFloat() * (float) rows * 0.4f,
                        0.0f, 0.03f, 1);
 
-            if (rng.nextFloat() < 0.12f)                     // floating hollow squares
+            // floating hollow squares (the acid mockup is covered in them)
+            const float sqRate = (theme == 2 || theme == 5) ? 0.45f : 0.12f;
+            if (rng.nextFloat() < sqRate)
                 spawn (8.0f + rng.nextFloat() * (float) (cols - 16),
                        14.0f + rng.nextFloat() * (float) (rows - 60),
                        (rng.nextFloat() - 0.5f) * 0.06f, -0.02f - rng.nextFloat() * 0.05f, 4);
@@ -955,6 +1163,7 @@ private:
     GeekEngine& engine;
     State state;
     Fight fight;
+    std::array<float, gridCols> env {};   // smoothed per-column wave envelope
     std::array<Particle, 224> particles;
     juce::Random rng;
     float animPhase = 0.0f;
@@ -963,7 +1172,7 @@ private:
     juce::Image screenBuf;
     int autoTagRow = 0;
 
-    juce::uint32 bootEnd = 0, swapEnd = 0, hudEnd = 0, flashEnd = 0;
+    juce::uint32 bootEnd = 0, hudEnd = 0, flashEnd = 0;
     juce::String hudName;
     float hudValue = 0.0f;
     juce::String flashText;

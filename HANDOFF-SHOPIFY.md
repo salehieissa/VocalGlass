@@ -4,16 +4,86 @@
 >
 > ```
 > Ingest HANDOFF-SHOPIFY.md from the VocalGlass plugin repo. You already know
-> the VocalEssential catalog — this is the update handoff: the catalog is now
-> 16 plugins (VocalRack is tossed — remove/unpublish any VocalRack or
-> VocalRack-preset-pack SKUs), five plugins are new (VocalMod, VocalBlend,
-> VocalChop, VocalClip, VocalGate) and every plugin got the photoreal UI
-> rework. Attach the new ad-image set to every product (§2), add/verify SKUs
-> for the five new plugins, reconcile the storefront .env
-> (KEYGEN_POLICY_SINGLES / KEYGEN_POLICY_SUITE / KEYGEN_POLICY_PRO) against
-> §3, and wire fulfillment (pkg delivery + license mint per policy). When
-> done, produce HANDOFF-OPENCLAW.md as described at the end of this document.
+> the VocalEssential catalog and shipped the 16-plugin v1.0.0 store. This is
+> the Jul 16 delta handoff: ONE new plugin, VocalGeek — read §0 first and do
+> exactly what it says: create the VocalGeek product + SKU, add vocalgeek to
+> KEYGEN_POLICY_SINGLES in the storefront env (Oxygen too, not just local),
+> REPLACE the Suite download zip (it now contains the 17-plugin macOS pkg)
+> on both the Suite-Lifetime and Pro-Monthly products, attach the new
+> VocalGeek download zip to the new product, and schedule the Windows
+> follow-up swap described there. Everything else from the Jul 7 handoff
+> (sections 1-5) is unchanged and already live. When done, update
+> HANDOFF-OPENCLAW.md with the new product + policy row.
 > ```
+
+---
+
+## 0. Jul 16 2026 UPDATE — VocalGeek (do this now; the rest of this doc is the Jul 7 baseline you already shipped)
+
+**The catalog is now 17 plugins.** VocalGeek is a brand-new plugin — the
+handheld "dose console": a Game Boy-style vocal performance FX unit with five
+"cartridges" (lean / smoke / acid / snow / geeked) that each load a different
+FX chain and recolor the whole console, a live pixel screen, stutter/tape-stop
+performance pads, tempo-synced auto mode, print-to-WAV drag export, MIDI-
+playable pads, per-cartridge settings memory, and a hidden 6th cartridge
+behind a cheat code. It slots after VocalChain-style processing as the
+"performance / destruction" plugin. Merchandise it as a drop/limited-feel
+release — it is deliberately scroll-stopping.
+
+### 0.1 Files (all fresh, notarized, verified Jul 16)
+
+- **New product download**: `dist-zip/VocalGeek-1.0.0-mac-win.zip`
+  (macOS pkg + README; **the Windows msi is NOT in it yet** — see 0.4).
+- **REPLACE the Suite download**: `dist-zip/VocalEssential-Suite-1.0.0-mac-win.zip`
+  was rebuilt — the macOS pkg inside now installs **all 17 plugins including
+  VocalGeek**. Swap this file on **both** products that deliver the suite:
+  the Suite (Lifetime) product **and the Pro (Monthly) subscription**. The
+  README inside tells Windows users the msi update is imminent (it still
+  installs 16 until the Windows agent ships — see 0.4).
+- Raw pkgs if you need them: `dist/VocalGeek-1.0.0.pkg`,
+  `dist/VocalEssential-Suite-1.0.0.pkg` — both Developer ID-signed,
+  notarized, stapled, `spctl` "accepted / Notarized Developer ID".
+- `dist/manifest-1.0.0.json` regenerated (18 entries: 17 singles + suite)
+  with fresh sha256 for the two changed/new pkgs — verify against it before
+  attaching.
+
+### 0.2 Keygen (already provisioned — wire it, don't create it)
+
+- Product **VocalGeek**: `28c55338-b57a-4749-bb0f-d90496bfc3f4`
+- Policy **VocalGeek – Perpetual**: `38f91492-884c-4ee1-8e51-af33203be12d`
+  (floating, maxMachines 2 — identical settings to every other single).
+- `storefront-handoff/keygen-policy-singles.json` updated (17 entries,
+  `vocalrack` removed, `vocalgeek` added). **Update `KEYGEN_POLICY_SINGLES`
+  in the deployed storefront env (Oxygen)** — the local `.env` in the
+  Hydrogen repo has already been updated as a reference.
+- Suite + Pro keys already unlock VocalGeek (suite-product check in the
+  plugin) — no policy change needed on the suite side.
+- QA key if you want to test activation end-to-end:
+  `ACC160-604AA4-FF6FE4-B362B2-6F90B2-V3` (internal; don't ship it).
+
+### 0.3 Product listing
+
+- SKU/handle: `vocalgeek`, plugin code `Vgek`, price in line with the other
+  singles ($39.99).
+- Copy hooks: five drug-cartridge FX modes that recolor the whole console;
+  live pixel screen that reacts to the vocal (syrup drips, smoke plumes,
+  melting acid rainbow, snow flurry, glitch); stutter + tape-stop hit pads;
+  tempo-synced AUTO performance brain; print & drag the frozen loop straight
+  into the DAW as WAV; MIDI-playable; every cartridge remembers its own
+  settings; hidden overdose cartridge behind a Game Boy cheat code.
+- Imagery: `screenshots/clean/VocalGeek.png` is in the repo now. The
+  Higgsfield ad-render set (`vocalgeek-product.png` float on white etc.) is
+  NOT rendered yet — launch the product with the clean screenshot, and the
+  render set will follow via `marketing/HIGGSFIELD-PROMPTS.md` conventions.
+
+### 0.4 Windows follow-up (scheduled swap — don't gate launch on it)
+
+`HANDOFF-WINDOWS.md` (Jul 16 section) tasks the Windows agent with building
+`VocalGeek-1.0.0.msi` and rebuilding `VocalEssential-Suite-1.0.0.msi` with all
+17. When those land, the mac side re-splices both `-mac-win.zip` files and
+tells you — at that point re-attach the refreshed Suite zip (both suite
+products) and VocalGeek zip. Until then the READMEs inside the zips cover the
+gap honestly.
 
 ---
 

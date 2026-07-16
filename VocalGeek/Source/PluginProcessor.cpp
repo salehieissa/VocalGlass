@@ -9,6 +9,69 @@ VocalGeekProcessor::VocalGeekProcessor()
       apvts (*this, nullptr, "PARAMS", createParameterLayout())
 {
     license.loadCachedAndValidate();
+    lastTheme = (int) apvts.getRawParameterValue ("theme")->load();
+    apvts.addParameterListener ("theme", this);
+}
+
+VocalGeekProcessor::~VocalGeekProcessor()
+{
+    apvts.removeParameterListener ("theme", this);
+    cancelPendingUpdate();
+}
+
+//==============================================================================
+// Per-cartridge memory. Swapping cartridges stashes the outgoing cartridge's
+// settings and restores whatever the incoming one was last set to, so every
+// drug keeps its own dose/texture/space/rate/auto/output. First visit to a
+// cartridge inherits the current settings (nothing to recall yet).
+const char* const* VocalGeekProcessor::snapshotIds()
+{
+    static const char* const ids[] = { "dose", "texture", "space",
+                                       "rate", "auto", "output", nullptr };
+    return ids;
+}
+
+void VocalGeekProcessor::parameterChanged (const juce::String&, float newValue)
+{
+    if (recalling)
+        return;
+    pendingRecallTheme.store ((int) std::round (newValue));
+    triggerAsyncUpdate();
+}
+
+void VocalGeekProcessor::handleAsyncUpdate()
+{
+    const int newTheme = pendingRecallTheme.exchange (-1);
+    if (newTheme < 0 || newTheme >= numThemes || newTheme == lastTheme)
+        return;
+
+    snapshotTheme (lastTheme);
+    recallTheme (newTheme);
+    lastTheme = newTheme;
+}
+
+void VocalGeekProcessor::snapshotTheme (int theme)
+{
+    if (! juce::isPositiveAndBelow (theme, numThemes))
+        return;
+    auto& slot = themeMemory[(size_t) theme];
+    for (auto id = snapshotIds(); *id != nullptr; ++id)
+        slot[*id] = apvts.getRawParameterValue (*id)->load();
+}
+
+void VocalGeekProcessor::recallTheme (int theme)
+{
+    if (! juce::isPositiveAndBelow (theme, numThemes))
+        return;
+    const auto& slot = themeMemory[(size_t) theme];
+    if (slot.empty())
+        return;                       // never visited: keep current settings
+
+    recalling = true;
+    for (const auto& [id, value] : slot)
+        if (auto* p = apvts.getParameter (id))
+            p->setValueNotifyingHost (p->convertTo0to1 (value));
+    recalling = false;
 }
 
 //==============================================================================
@@ -181,6 +244,10 @@ void VocalGeekProcessor::applyProgram (int index)
     if (! juce::isPositiveAndBelow (index, (int) presets.size()))
         return;
 
+    // preset values win over cartridge memory — suppress the recall
+    recalling = true;
+    cancelPendingUpdate();
+
     for (auto* ap : getParameters())
         if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (ap))
             rp->setValueNotifyingHost (rp->getDefaultValue());
@@ -188,6 +255,9 @@ void VocalGeekProcessor::applyProgram (int index)
     for (const auto& [id, value] : presets[(size_t) index].values)
         if (auto* p = apvts.getParameter (id))
             p->setValueNotifyingHost (p->convertTo0to1 (value));
+
+    recalling = false;
+    lastTheme = (int) apvts.getRawParameterValue ("theme")->load();
 }
 
 //==============================================================================
@@ -198,16 +268,52 @@ juce::AudioProcessorEditor* VocalGeekProcessor::createEditor()
 
 void VocalGeekProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
+    snapshotTheme (lastTheme);   // fold the live settings into the memory first
+
     if (auto state = apvts.copyState(); state.isValid())
         if (auto xml = state.createXml())
+        {
+            // cartridge memory rides along inside the session state
+            auto* mem = xml->createNewChildElement ("THEMEMEMORY");
+            for (int t = 0; t < numThemes; ++t)
+            {
+                if (themeMemory[(size_t) t].empty())
+                    continue;
+                auto* slot = mem->createNewChildElement ("SLOT");
+                slot->setAttribute ("theme", t);
+                for (const auto& [id, value] : themeMemory[(size_t) t])
+                    slot->setAttribute (id, value);
+            }
             copyXmlToBinary (*xml, destData);
+        }
 }
 
 void VocalGeekProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts.state.getType()))
+        {
+            for (auto& slot : themeMemory)
+                slot.clear();
+            if (auto* mem = xml->getChildByName ("THEMEMEMORY"))
+                for (auto* slot : mem->getChildIterator())
+                {
+                    const int t = slot->getIntAttribute ("theme", -1);
+                    if (! juce::isPositiveAndBelow (t, numThemes))
+                        continue;
+                    for (auto id = snapshotIds(); *id != nullptr; ++id)
+                        if (slot->hasAttribute (*id))
+                            themeMemory[(size_t) t][*id]
+                                = (float) slot->getDoubleAttribute (*id);
+                }
+            xml->deleteAllChildElementsWithTagName ("THEMEMEMORY");
+
+            recalling = true;    // restored values win over cartridge memory
+            cancelPendingUpdate();
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            recalling = false;
+            lastTheme = (int) apvts.getRawParameterValue ("theme")->load();
+        }
 }
 
 //==============================================================================

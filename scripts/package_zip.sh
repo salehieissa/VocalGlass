@@ -24,6 +24,7 @@ WORK_DIR="$OUT_DIR/.work"
 PLUGINS=(
     VocalGrit VocalEss VocalQ VocalKnob VocalAir VocalComp
     Vocal2A VocalTune VocalVerb VocalDoubler VocalDelay
+    VocalGate VocalMod VocalBlend VocalChop VocalClip VocalGeek
 )
 
 c_blue()  { printf '\033[1;34m%s\033[0m\n' "$*"; }

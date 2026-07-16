@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include <array>
+#include <map>
 #include "dsp/GeekEngine.h"
 
 #include "../../common/Licensing/LicenseManager.h"
@@ -12,11 +14,13 @@
 // stutter, HIT B tape stop, PRINT freeze, TAP division cycle, D-pad texture and
 // space nudges.
 //==============================================================================
-class VocalGeekProcessor : public juce::AudioProcessor
+class VocalGeekProcessor : public juce::AudioProcessor,
+                           private juce::AudioProcessorValueTreeState::Listener,
+                           private juce::AsyncUpdater
 {
 public:
     VocalGeekProcessor();
-    ~VocalGeekProcessor() override = default;
+    ~VocalGeekProcessor() override;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -51,6 +55,20 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void applyProgram (int index);
+
+    // Per-cartridge memory: every cartridge keeps its own knob settings, so
+    // swapping snow -> lean -> snow brings snow back exactly as you left it.
+    void parameterChanged (const juce::String& id, float newValue) override;
+    void handleAsyncUpdate() override;              // applies the snapshot on the message thread
+    void snapshotTheme (int theme);
+    void recallTheme (int theme);
+
+    static constexpr int numThemes = 6;
+    static const char* const* snapshotIds();        // params captured per cartridge
+    std::array<std::map<juce::String, float>, numThemes> themeMemory;
+    std::atomic<int> pendingRecallTheme { -1 };
+    int lastTheme = 0;
+    bool recalling = false;
 
     double currentSampleRate = 44100.0;
     int currentProgram = 0;

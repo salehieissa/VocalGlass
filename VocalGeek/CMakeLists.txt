@@ -7,7 +7,7 @@ if(APPLE)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS universal binary")
 endif()
 
-project(VocalGeek VERSION 0.1.0)
+project(VocalGeek VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -120,3 +120,13 @@ if(EXISTS "${VG_FONT_REG}")
         target_compile_definitions(VocalGeek PUBLIC VG_HAS_BUNDLED_FONT_BOLD=1)
     endif()
 endif()
+
+# --- offscreen screen-preview harness (renders every theme's screen to /tmp) ---
+juce_add_console_app(GeekScreenPreview PRODUCT_NAME "GeekScreenPreview")
+target_sources(GeekScreenPreview PRIVATE Tools/ScreenPreview.cpp)
+target_compile_definitions(GeekScreenPreview PRIVATE
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+    JUCE_MODAL_LOOPS_PERMITTED=1)
+target_link_libraries(GeekScreenPreview PRIVATE
+    juce::juce_gui_basics juce::juce_dsp juce::juce_audio_utils
+    PUBLIC juce::juce_recommended_config_flags)
